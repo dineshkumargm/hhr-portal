@@ -84,7 +84,7 @@ const Chat: React.FC = () => {
         const initialMsg: Message = {
             id: '1',
             role: 'assistant',
-            content: "Hello! I'm **RecruitAI Agent**. I can help you analyze candidates, discuss job descriptions, review resumes, or answer questions about your recruitment pipeline.\n\nSelect a **Job**, **Resume**, or **Candidate** to get started, or just ask me anything!",
+            content: "Hello! I'm **KAI Agent**. I can help you analyze candidates, discuss job descriptions, review resumes, or answer questions about your recruitment pipeline.\n\nSelect a **Job**, **Resume**, or **Candidate** to get started, or just ask me anything!",
             timestamp: new Date()
         };
         setMessages([initialMsg]);
@@ -156,7 +156,7 @@ const Chat: React.FC = () => {
     };
 
     const buildContextPrompt = async (): Promise<string> => {
-        let contextPrompt = "You are RecruitAI Agent, an advanced AI recruitment assistant designed to be helpful, professional, and data-driven. Use markdown formatting (bolding, lists, tables) to make your responses easy to read. ";
+        let contextPrompt = "You are KAI Agent, an advanced AI recruitment assistant designed to be helpful, professional, and data-driven. Use markdown formatting (bolding, lists, tables) to make your responses easy to read. ";
 
         if (context.type === 'job' && context.data) {
             const job = context.data as Job;
@@ -274,7 +274,7 @@ const Chat: React.FC = () => {
 
             const genAIInstance = new GoogleGenerativeAI(API_KEY);
             const model = genAIInstance.getGenerativeModel({
-                model: 'gemini-flash-latest'
+                model: 'gemini-1.5-flash'
             });
 
             const contextPrompt = await buildContextPrompt();
@@ -401,7 +401,7 @@ const Chat: React.FC = () => {
                     </div>
                     <div>
                         <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                            RecruitAI Agent
+                            KAI Agent
                             <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider">Beta</span>
                         </h2>
                         <p className="text-sm text-gray-500 font-medium">Your Intelligent Hiring Copilot</p>
