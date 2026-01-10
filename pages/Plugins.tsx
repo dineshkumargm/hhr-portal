@@ -34,7 +34,7 @@ const PLUGINS_DATA: Plugin[] = [
         description: 'Sync conversations and schedule interviews directly via email.',
         category: 'Communication',
         icon: 'https://cdn-icons-png.flaticon.com/512/732/732200.png',
-        status: 'Inactive',
+        status: 'Connected',
         popular: true,
     },
     {
@@ -68,7 +68,7 @@ const PLUGINS_DATA: Plugin[] = [
         description: 'Automatically generate meeting links for your interviews.',
         category: 'Communication',
         icon: 'https://st1.zoom.us/zoom.ico',
-        status: 'Inactive',
+        status: 'Connected',
     },
     {
         id: 'calendly',
@@ -128,8 +128,8 @@ const Plugins: React.FC = () => {
                             key={cat}
                             onClick={() => setActiveCategory(cat)}
                             className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${activeCategory === cat
-                                    ? 'bg-primary text-white shadow-lg shadow-blue-500/30'
-                                    : 'text-text-secondary hover:text-primary hover:bg-blue-50'
+                                ? 'bg-primary text-white shadow-lg shadow-blue-500/30'
+                                : 'text-text-secondary hover:text-primary hover:bg-blue-50'
                                 }`}
                         >
                             {cat}
@@ -180,8 +180,8 @@ const Plugins: React.FC = () => {
                                 <button
                                     onClick={() => toggleStatus(plugin.id)}
                                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${plugin.status === 'Connected'
-                                            ? 'bg-red-50 text-accent-red hover:bg-red-100'
-                                            : 'bg-primary text-white hover:bg-primary-hover shadow-lg shadow-blue-500/20'
+                                        ? 'bg-red-50 text-accent-red hover:bg-red-100'
+                                        : 'bg-primary text-white hover:bg-primary-hover shadow-lg shadow-blue-500/20'
                                         }`}
                                 >
                                     {plugin.status === 'Connected' ? 'Disconnect' : 'Connect'}
