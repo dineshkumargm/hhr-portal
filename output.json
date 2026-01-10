@@ -1,0 +1,159 @@
+{
+    "job_summary": {
+        "role": "Machine Learning Engineer",
+        "required_skills": [
+            "Python",
+            "Machine Learning algorithms",
+            "NumPy",
+            "Pandas",
+            "Scikit-learn",
+            "TensorFlow",
+            "PyTorch",
+            "AWS",
+            "MLOps"
+        ],
+        "preferred_skills": [
+            "NLP",
+            "Computer Vision",
+            "Statistics",
+            "REST APIs"
+        ],
+        "experience_required": "Not explicitly stated (Implied Mid-Level from MLOps/AWS requirements)",
+        "domain": "Machine Learning / AI Engineering"
+    },
+    "ranked_candidates": [
+        {
+            "candidate_id": "c-1767953250533",
+            "match_score": 92,
+            "fit_level": "Excellent fit",
+            "matched_skills": [
+                "Python",
+                "Tensorflow",
+                "NumPy",
+                "Pandas",
+                "AWS",
+                "MLOps",
+                "Computer Vision",
+                "NLP"
+            ],
+            "missing_skills": [
+                "PyTorch"
+            ],
+            "experience_match": "Strong alignment. MLOps Intern experience directly matches the MLOps requirement. Experience with AWS (Sagemaker, Lambda, EKS) is a high-value match.",
+            "project_relevance": "High. Projects include 'RAG System using AWS Bedrock', 'RecruitAI (HR Platform)', and 'Surface Crack detection'. Demonstrates end-to-end deployment skills.",
+            "explanation": "Dinesh is the top candidate due to his specific experience with MLOps and AWS, which are key requirements for this role. His project portfolio covers both Generative AI (RAG) and traditional Computer Vision, showing versatility. The internship in MLOps strongly differentiates him.",
+            "flags": []
+        },
+        {
+            "candidate_id": "c-1767900785590",
+            "match_score": 88,
+            "fit_level": "Excellent fit",
+            "matched_skills": [
+                "Python",
+                "Tensorflow",
+                "Scikit-Learn",
+                "FAISS",
+                "AWS",
+                "CrewAI",
+                "NLP"
+            ],
+            "missing_skills": [
+                "MLOps",
+                "PyTorch"
+            ],
+            "experience_match": "Good alignment. Two AI internships (Infosys, SpectoV) provide practical industry exposure.",
+            "project_relevance": "High. Projects focus on advanced AI applications like 'AI Powered Storyteller' and 'AI Research Assistant' using RAG and Agents.",
+            "explanation": "Varun is a very strong candidate with solid internship experience and advanced projects involving LLMs and Agents (CrewAI). He matches the core Python/AI stack well. Slightly lower score than Dinesh due to less explicit 'MLOps' emphasis in the resume text, though his deployment work suggests capability.",
+            "flags": []
+        },
+        {
+            "candidate_id": "c-1767903746158",
+            "match_score": 78,
+            "fit_level": "Strong fit",
+            "matched_skills": [
+                "Python",
+                "TensorFlow",
+                "Machine Learning",
+                "Deep Learning"
+            ],
+            "missing_skills": [
+                "AWS",
+                "MLOps",
+                "PyTorch"
+            ],
+            "experience_match": "Moderate. Student projects and 'Machine Learning Engineer' role in academic projects.",
+            "project_relevance": "Good. 'Music Source Separation' and 'Agri Chatbot' show competence in Deep Learning and NLP.",
+            "explanation": "Sandhiya demonstrates solid foundational skills in ML and Deep Learning through varied projects. She is a strong candidate but lacks the specific Cloud/MLOps infrastructure experience found in the top-ranked candidates.",
+            "flags": []
+        },
+        {
+            "candidate_id": "c-1767903708765",
+            "match_score": 25,
+            "fit_level": "Weak fit",
+            "matched_skills": [
+                "Python"
+            ],
+            "missing_skills": [
+                "Machine Learning algorithms",
+                "TensorFlow",
+                "PyTorch",
+                "AWS",
+                "MLOps",
+                "Scikit-learn"
+            ],
+            "experience_match": "None. Experience is in Cybersecurity and Networking.",
+            "project_relevance": "Low. Projects are focused on SIEM, Threat Detection, and Forensics.",
+            "explanation": "Sam Britto's profile is focused on Cybersecurity and SOC Analysis. While he knows Python, his domain is finding threats, not building ML models. He is not a fit for this ML Engineer role.",
+            "flags": [
+                "resume is largely irrelevant to the JD"
+            ]
+        },
+        {
+            "candidate_id": "c-1767903764359",
+            "match_score": 20,
+            "fit_level": "Weak fit",
+            "matched_skills": [
+                "Python"
+            ],
+            "missing_skills": [
+                "Machine Learning algorithms",
+                "TensorFlow",
+                "PyTorch",
+                "AWS",
+                "MLOps",
+                "Scikit-learn"
+            ],
+            "experience_match": "None. Experience is in Network Security.",
+            "project_relevance": "Low. Projects involve Network Monitoring and Linux Auditing.",
+            "explanation": "Shanjaiy is a Network Security Engineer. His skills and projects do not align with the Machine Learning Engineer requirements.",
+            "flags": [
+                "resume is largely irrelevant to the JD"
+            ]
+        },
+        {
+            "candidate_id": "c-1767903780344",
+            "match_score": 0,
+            "fit_level": "Weak fit",
+            "matched_skills": [],
+            "missing_skills": [
+                "All required skills"
+            ],
+            "experience_match": "Unknown",
+            "project_relevance": "Unknown",
+            "explanation": "Resume parsed as empty/unreadable. Could be an image-only PDF or corrupted file.",
+            "flags": [
+                "Resume content is empty or unreadable"
+            ]
+        }
+    ],
+    "overall_insights": {
+        "total_resumes": 6,
+        "strong_fits": 3,
+        "partial_fits": 0,
+        "weak_fits": 3,
+        "common_skill_gaps": [
+            "PyTorch",
+            "MLOps (for junior candidates)"
+        ]
+    }
+}

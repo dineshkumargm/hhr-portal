@@ -1,0 +1,7 @@
+{
+  "name": "RecruitAI - Smart Applicant Tracking System",
+  "description": "An enterprise-grade recruitment dashboard with AI-powered resume parsing, candidate match analysis, and bulk upload capabilities.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .dark .glass-panel {
+    background: rgba(16, 19, 34, 0.7);
+  }
+
+  .hero-pattern {
+    background-image: radial-gradient(#0d33f2 0.5px, transparent 0.5px), radial-gradient(#0d33f2 0.5px, #f5f6f8 0.5px);
+    background-size: 20px 20px;
+    background-position: 0 0, 10px 10px;
+    opacity: 0.05;
+  }
+
+  .dark .hero-pattern {
+    background-image: radial-gradient(#ffffff 0.5px, transparent 0.5px), radial-gradient(#ffffff 0.5px, #101322 0.5px);
+    opacity: 0.03;
+  }
+
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+
+  .rotate-y--5 {
+    transform: rotateY(-5deg);
+  }
+
+  .rotate-x-5 {
+    transform: rotateX(5deg);
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Aggressive Select Reset */
+select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+}
+
+select::-ms-expand {
+  display: none !important;
+}
