@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "start": "concurrently \"npm run backend\" \"npm run dev\"",
-    "dev": "vite",
+    "dev": "npx vite",
     "backend": "node server.js",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "npx vite build",
+    "preview": "npx vite preview"
   },
   "dependencies": {
     "@google/genai": "^1.35.0",
@@ -38,4 +38,5 @@
     "typescript": "~5.8.2",
     "vite": "^6.4.1"
   }
+  
 }
