@@ -274,7 +274,7 @@ const Chat: React.FC = () => {
 
             const genAIInstance = new GoogleGenerativeAI(API_KEY);
             const model = genAIInstance.getGenerativeModel({
-                model: 'gemini-1.5-flash'
+                model: "gemini-flash-latest"
             });
 
             const contextPrompt = await buildContextPrompt();
