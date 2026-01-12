@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/db';
 import { Job, Candidate } from '../types';
-import { analyzeResume, fileToBase64 } from '../services/ai';
+import { analyzeResume, fileToBase64, extractJobDetailsFromPDF } from '../services/ai';
 
 interface UploadFile {
     id: string;
@@ -20,6 +20,9 @@ const ResumeScore: React.FC = () => {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [selectedCandidate, setSelectedCandidate] = useState<any | null>(null);
+    const [jdSource, setJdSource] = useState<'select' | 'upload'>('select');
+    const [jdFile, setJdFile] = useState<File | null>(null);
+    const [isExtractingJd, setIsExtractingJd] = useState(false);
 
     useEffect(() => {
         const fetchJobs = async () => {
@@ -61,8 +64,50 @@ const ResumeScore: React.FC = () => {
 
         setIsAnalyzing(true);
         try {
-            const allJobs = await db.jobs.find();
-            const currentJob = allJobs.find(j => j.id === selectedJobId);
+            let currentJob: Job | undefined;
+
+            if (jdSource === 'upload' && jdFile) {
+                console.log("[RESUME SCORE] Extracting details from uploaded JD...");
+                setIsExtractingJd(true);
+                try {
+                    const extractedJd = await extractJobDetailsFromPDF(jdFile);
+                    console.log("[RESUME SCORE] JD Extracted:", extractedJd);
+
+                    // Create a new Job record
+                    const newJob: Job = {
+                        id: `j-${Date.now()}`,
+                        title: extractedJd.title || "Uploaded Job Position",
+                        department: extractedJd.department || "General",
+                        location: extractedJd.location || "Remote",
+                        type: extractedJd.type || "Full-time",
+                        status: 'Active',
+                        applicantsCount: 0,
+                        matchesCount: 0,
+                        skills: extractedJd.skills || [],
+                        description: `Extracted from ${jdFile.name}`
+                    };
+
+                    // Optimistic update
+                    setJobs(prev => [newJob, ...prev]);
+                    setSelectedJobId(newJob.id);
+                    currentJob = newJob;
+
+                    // Save to DB (Fire and forget, or await if strict)
+                    await db.jobs.insertOne(newJob);
+
+                } catch (err: any) {
+                    console.error("JD Extraction Failed:", err);
+                    setErrorMsg(`Failed to extract job details: ${err.message}`);
+                    setIsAnalyzing(false);
+                    setIsExtractingJd(false);
+                    return;
+                } finally {
+                    setIsExtractingJd(false);
+                }
+            } else {
+                const allJobs = await db.jobs.find();
+                currentJob = allJobs.find(j => j.id === selectedJobId);
+            }
 
             if (!currentJob) {
                 console.error("[RESUME SCORE] Selected job not found in DB:", selectedJobId);
@@ -190,78 +235,122 @@ const ResumeScore: React.FC = () => {
                         <span className="material-symbols-outlined text-[20px]">business_center</span>
                         <span className="text-sm">Select Job</span>
                     </div>
-                    <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm min-h-[500px] flex flex-col">
-                        {jobs.length === 0 ? (
-                            <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
-                                <div className="size-16 bg-gray-50 rounded-xl flex items-center justify-center text-gray-300 mb-4">
-                                    <span className="material-symbols-outlined text-[40px]">work_off</span>
-                                </div>
-                                <p className="text-sm text-gray-400 font-medium mb-2">No jobs available</p>
-                                <p className="text-xs text-gray-300">Create a job first to score resumes</p>
-                            </div>
-                        ) : (
-                            <>
-                                <label className="block mb-4">
-                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Select Job Position</span>
-                                    <select
-                                        value={selectedJobId}
-                                        onChange={(e) => setSelectedJobId(e.target.value)}
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                                    >
-                                        {jobs.map(job => (
-                                            <option key={job.id} value={job.id}>
-                                                {job.title} - {job.department} ({job.location})
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
+                    <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/50 min-h-[500px] flex flex-col hover:border-blue-100 transition-colors">
+                        {/* JD Source Toggle */}
+                        <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
+                            <button
+                                onClick={() => setJdSource('select')}
+                                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${jdSource === 'select' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Select Existing
+                            </button>
+                            <button
+                                onClick={() => setJdSource('upload')}
+                                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${jdSource === 'upload' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Upload JD
+                            </button>
+                        </div>
 
-                                {selectedJobId && (
-                                    <div className="flex-1 bg-gray-50 rounded-xl p-4 border border-gray-100">
-                                        <div className="mb-3">
-                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Job Details</span>
-                                        </div>
-                                        {(() => {
-                                            const selectedJob = jobs.find(j => j.id === selectedJobId);
-                                            if (!selectedJob) return null;
-                                            return (
-                                                <div className="space-y-2">
-                                                    <div>
-                                                        <span className="text-xs text-gray-400 font-medium">Title:</span>
-                                                        <p className="text-sm font-bold text-gray-700">{selectedJob.title}</p>
-                                                    </div>
-                                                    <div>
-                                                        <span className="text-xs text-gray-400 font-medium">Department:</span>
-                                                        <p className="text-sm font-medium text-gray-600">{selectedJob.department}</p>
-                                                    </div>
-                                                    <div>
-                                                        <span className="text-xs text-gray-400 font-medium">Location:</span>
-                                                        <p className="text-sm font-medium text-gray-600">{selectedJob.location}</p>
-                                                    </div>
-                                                    {selectedJob.skills && selectedJob.skills.length > 0 && (
-                                                        <div>
-                                                            <span className="text-xs text-gray-400 font-medium">Skills:</span>
-                                                            <div className="flex flex-wrap gap-1 mt-1">
-                                                                {selectedJob.skills.map((skill, idx) => (
-                                                                    <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-lg">
-                                                                        {skill}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    {selectedJob.description && (
-                                                        <div className="mt-3 pt-3 border-t border-gray-200">
-                                                            <span className="text-xs text-gray-400 font-medium">Description:</span>
-                                                            <p className="text-xs text-gray-600 mt-1 line-clamp-4">{selectedJob.description}</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })()}
+                        {jdSource === 'upload' ? (
+                            <div className="flex-1 flex flex-col">
+                                <label className="border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer hover:bg-gray-50 hover:border-blue-200 transition-all p-8 mb-4 h-48">
+                                    <input
+                                        type="file"
+                                        accept=".pdf"
+                                        className="hidden"
+                                        onChange={(e) => e.target.files && setJdFile(e.target.files[0])}
+                                    />
+                                    <div className="size-12 rounded-xl bg-purple-50 text-purple-500 flex items-center justify-center mb-3">
+                                        <span className="material-symbols-outlined text-2xl">description</span>
+                                    </div>
+                                    <h3 className="text-sm font-bold text-gray-700 mb-1">
+                                        {jdFile ? jdFile.name : "Upload Job Description"}
+                                    </h3>
+                                    <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">
+                                        {jdFile ? "Click to change" : "PDF ONLY"}
+                                    </p>
+                                </label>
+                                {jdFile && (
+                                    <div className="bg-green-50 text-green-700 px-4 py-3 rounded-xl text-xs font-bold flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-sm">check_circle</span>
+                                        Ready to extract details
                                     </div>
                                 )}
-                            </>
+                            </div>
+                        ) : (
+                            jobs.length === 0 ? (
+                                <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
+                                    <div className="size-16 bg-gray-50 rounded-xl flex items-center justify-center text-gray-300 mb-4">
+                                        <span className="material-symbols-outlined text-[40px]">work_off</span>
+                                    </div>
+                                    <p className="text-sm text-gray-400 font-medium mb-2">No jobs available</p>
+                                    <p className="text-xs text-gray-300">Create a job first to score resumes</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <label className="block mb-4">
+                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Select Job Position</span>
+                                        <select
+                                            value={selectedJobId}
+                                            onChange={(e) => setSelectedJobId(e.target.value)}
+                                            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                        >
+                                            {Array.from(new Map(jobs.map(job => [job.id, job])).values()).map(job => (
+                                                <option key={job.id} value={job.id}>
+                                                    {job.title} - {job.department} ({job.location})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </label>
+
+                                    {selectedJobId && (
+                                        <div className="flex-1 bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                            <div className="mb-3">
+                                                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Job Details</span>
+                                            </div>
+                                            {(() => {
+                                                const selectedJob = jobs.find(j => j.id === selectedJobId);
+                                                if (!selectedJob) return null;
+                                                return (
+                                                    <div className="space-y-2">
+                                                        <div>
+                                                            <span className="text-xs text-gray-400 font-medium">Title:</span>
+                                                            <p className="text-sm font-bold text-gray-700">{selectedJob.title}</p>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-xs text-gray-400 font-medium">Department:</span>
+                                                            <p className="text-sm font-medium text-gray-600">{selectedJob.department}</p>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-xs text-gray-400 font-medium">Location:</span>
+                                                            <p className="text-sm font-medium text-gray-600">{selectedJob.location}</p>
+                                                        </div>
+                                                        {selectedJob.skills && selectedJob.skills.length > 0 && (
+                                                            <div>
+                                                                <span className="text-xs text-gray-400 font-medium">Skills:</span>
+                                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                                    {selectedJob.skills.map((skill, idx) => (
+                                                                        <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-lg">
+                                                                            {skill}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        {selectedJob.description && (
+                                                            <div className="mt-3 pt-3 border-t border-gray-200">
+                                                                <span className="text-xs text-gray-400 font-medium">Description:</span>
+                                                                <p className="text-xs text-gray-600 mt-1 line-clamp-4">{selectedJob.description}</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    )}
+                                </>
+                            )
                         )}
                     </div>
                 </div>
@@ -272,11 +361,11 @@ const ResumeScore: React.FC = () => {
                         <span className="material-symbols-outlined text-[20px]">cloud_upload</span>
                         <span className="text-sm">Upload Resumes</span>
                     </div>
-                    <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm min-h-[500px] flex flex-col">
-                        <label className="border-2 border-dashed border-gray-100 rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer hover:bg-gray-50/50 transition-all group p-8 mb-6 bg-gray-50/30">
+                    <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-xl shadow-gray-200/50 min-h-[500px] flex flex-col hover:border-blue-100 transition-colors">
+                        <label className="border-2 border-dashed border-gray-100 rounded-3xl flex flex-col items-center justify-center text-center cursor-pointer hover:bg-gray-50/80 hover:border-primary/30 transition-all group p-8 mb-6 bg-gray-50/30">
                             <input type="file" multiple accept=".pdf,.doc,.docx" className="hidden" onChange={handleFileSelect} />
-                            <div className="size-14 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm">
-                                <span className="material-symbols-outlined text-2xl">upload</span>
+                            <div className="size-16 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center mb-4 group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-sm">
+                                <span className="material-symbols-outlined text-3xl">cloud_upload</span>
                             </div>
                             <h3 className="text-base font-bold text-gray-700 mb-1">Click to upload or drag and drop</h3>
                             <p className="text-gray-400 text-xs font-bold uppercase tracking-wider">PDF, DOCX (Max 10MB)</p>
@@ -331,173 +420,192 @@ const ResumeScore: React.FC = () => {
                         <button
                             onClick={startAnalysis}
                             disabled={isAnalyzing || files.length === 0 || !selectedJobId || jobs.length === 0}
-                            className="w-full bg-primary hover:bg-primary-hover disabled:bg-gray-100 disabled:text-gray-400 text-white h-14 rounded-xl font-bold flex items-center justify-center gap-3 transition-all active:scale-[0.98] shadow-lg shadow-blue-500/20 disabled:shadow-none"
+                            className="w-full bg-gray-900 hover:bg-black disabled:bg-gray-100 disabled:text-gray-400 text-white h-14 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all active:scale-[0.98] shadow-xl shadow-gray-900/20 disabled:shadow-none"
                         >
                             {isAnalyzing ? (
                                 <div className="size-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                             ) : (
                                 <span className="material-symbols-outlined filled">auto_awesome</span>
                             )}
-                            {isAnalyzing ? 'Scoring Pipeline...' : 'Score Resumes'}
+                            {isExtractingJd ? 'Extracting JD Details...' : isAnalyzing ? 'Scoring Pipeline...' : 'Score Resumes'}
                         </button>
                     </div>
                 </div>
             </div>
 
             {/* Results Section */}
-            <div className="flex flex-col gap-4 mt-6">
-                <div className="flex items-center gap-2 text-primary font-bold px-2">
-                    <span className="material-symbols-outlined text-[20px]">analytics</span>
-                    <span className="text-sm">Scoring Results</span>
+            <div className="flex flex-col gap-6 mt-8">
+                <div className="flex items-center justify-between px-2">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-600 rounded-lg text-white shadow-lg shadow-blue-500/30">
+                            <span className="material-symbols-outlined text-[20px]">analytics</span>
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-800">Scoring Results</h2>
+                            <p className="text-xs text-gray-500 font-medium">AI-ranked candidates based on job requirements</p>
+                        </div>
+                    </div>
+                    {files.filter(f => f.status === 'COMPLETED').length > 0 && (
+                        <div className="px-4 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded-full text-xs font-bold flex items-center gap-2">
+                            <span className="material-symbols-outlined text-sm">check_circle</span>
+                            Analysis Complete
+                        </div>
+                    )}
                 </div>
 
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden min-h-[300px] flex flex-col">
+                <div className="min-h-[300px]">
                     {files.length === 0 || files.every(f => f.status === 'READY') ? (
-                        <div className="flex-1 flex flex-col items-center justify-center p-20 text-center">
-                            <div className="size-16 bg-gray-50 rounded-xl flex items-center justify-center text-gray-200 mb-6">
-                                <span className="material-symbols-outlined text-[40px]">grid_view</span>
+                        <div className="bg-white/60 backdrop-blur-sm rounded-3xl border border-white/50 shadow-sm flex flex-col items-center justify-center p-20 text-center">
+                            <div className="size-20 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl flex items-center justify-center text-gray-300 mb-6 shadow-inner">
+                                <span className="material-symbols-outlined text-[48px]">grid_view</span>
                             </div>
-                            <p className="text-gray-400 font-medium max-w-sm">
-                                Upload resumes and click 'Score Resumes' to see analysis here.
+                            <h3 className="text-gray-800 font-bold text-lg mb-2">No Results Yet</h3>
+                            <p className="text-gray-500 font-medium max-w-sm text-sm">
+                                Upload resumes above and click <span className="text-primary font-bold">'Score Resumes'</span> to unlock AI-powered insights.
                             </p>
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead>
-                                    <tr className="bg-gray-50/50 border-b border-gray-100">
-                                        <th className="px-8 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Rank</th>
-                                        <th className="px-8 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Candidate</th>
-                                        <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Match Score</th>
-                                        <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">JD Match</th>
-                                        <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">Qual Match</th>
-                                        <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">Res Match</th>
-                                        <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Summary</th>
-                                        <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {files
-                                        .filter(f => f.status !== 'READY')
-                                        .sort((a, b) => (b.result?.matchScore || 0) - (a.result?.matchScore || 0))
-                                        .map((file, idx) => {
-                                            const renderScoreRing = (score: number, reason: string) => {
-                                                const radius = 18;
-                                                const stroke = 3;
-                                                const normalizedRadius = radius - stroke * 2;
-                                                const circumference = normalizedRadius * 2 * Math.PI;
-                                                const strokeDashoffset = circumference - (score / 100) * circumference;
+                        <div className="grid grid-cols-1 gap-4">
+                            {files
+                                .filter(f => f.status !== 'READY')
+                                .sort((a, b) => (b.result?.matchScore || 0) - (a.result?.matchScore || 0))
+                                .map((file, idx) => {
+                                    const score = file.result?.matchScore || 0;
+                                    const isCompleted = file.status === 'COMPLETED';
+                                    const isError = file.status === 'ERROR';
 
-                                                let colorClass = "text-red-500";
-                                                if (score >= 80) colorClass = "text-green-500";
-                                                else if (score >= 50) colorClass = "text-yellow-500";
+                                    // Dynamic gradients based on score
+                                    const scoreGradient = score >= 80 ? 'from-green-400 to-emerald-600' :
+                                        score >= 60 ? 'from-yellow-400 to-orange-500' :
+                                            'from-red-400 to-pink-600';
 
-                                                return (
-                                                    <div className="group relative flex items-center justify-center cursor-help">
-                                                        <div className="relative size-12 flex items-center justify-center">
-                                                            <svg height={radius * 2} width={radius * 2} className="rotate-[-90deg]">
-                                                                <circle
+                                    const cardBorder = score >= 80 ? 'hover:border-green-200' :
+                                        score >= 60 ? 'hover:border-yellow-200' :
+                                            'hover:border-red-200';
+
+                                    return (
+                                        <div
+                                            key={file.id}
+                                            className={`group relative bg-white rounded-2xl p-5 border border-gray-100 shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${cardBorder}`}
+                                        >
+                                            <div className="flex flex-col md:flex-row items-center gap-6">
+
+                                                {/* Rank & Score Visual */}
+                                                <div className="relative shrink-0 flex items-center justify-center">
+                                                    <div className="relative size-20">
+                                                        <svg className="size-full rotate-[-90deg]" viewBox="0 0 36 36">
+                                                            <path className="text-gray-100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3" />
+                                                            {isCompleted && (
+                                                                <path
+                                                                    className={`transition-all duration-1000 ease-out drop-shadow-md ${score >= 80 ? 'text-emerald-500' : score >= 60 ? 'text-orange-500' : 'text-pink-500'}`}
+                                                                    strokeDasharray={`${score}, 100`}
+                                                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                                                    fill="none"
                                                                     stroke="currentColor"
-                                                                    fill="transparent"
-                                                                    strokeWidth={stroke}
-                                                                    strokeDasharray={circumference + ' ' + circumference}
-                                                                    style={{ strokeDashoffset }}
-                                                                    r={normalizedRadius}
-                                                                    cx={radius}
-                                                                    cy={radius}
-                                                                    className={`${colorClass} transition-all duration-1000 ease-out`}
+                                                                    strokeWidth="3"
+                                                                    strokeLinecap="round"
                                                                 />
-                                                                <circle
-                                                                    stroke="#e5e7eb"
-                                                                    fill="transparent"
-                                                                    strokeWidth={stroke}
-                                                                    r={normalizedRadius}
-                                                                    cx={radius}
-                                                                    cy={radius}
-                                                                    className="opacity-20 absolute top-0 left-0"
-                                                                    style={{ zIndex: -1 }}
-                                                                />
-                                                            </svg>
-                                                            <span className={`absolute text-[10px] font-bold ${colorClass}`}>{score}%</span>
+                                                            )}
+                                                        </svg>
+                                                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                                            {isCompleted ? (
+                                                                <>
+                                                                    <span className="text-2xl font-black text-gray-800 tracking-tighter">{score}</span>
+                                                                    <span className="text-[9px] font-bold text-gray-400 uppercase">Match</span>
+                                                                </>
+                                                            ) : isError ? (
+                                                                <span className="material-symbols-outlined text-red-400 text-2xl">error</span>
+                                                            ) : (
+                                                                <div className="size-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                                            )}
                                                         </div>
+                                                    </div>
 
-                                                        {reason && (
-                                                            <div className="absolute bottom-full mb-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[10px] rounded-lg shadow-xl z-50 text-center pointer-events-none">
-                                                                {reason}
-                                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
-                                                            </div>
+                                                    {/* Rank Badge */}
+                                                    {isCompleted && (
+                                                        <div className={`absolute -top-1 -left-1 size-7 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-lg ${idx === 0 ? 'bg-orange-500 ring-2 ring-white' :
+                                                            idx === 1 ? 'bg-gray-400 ring-2 ring-white' :
+                                                                idx === 2 ? 'bg-orange-700 ring-2 ring-white' : 'bg-gray-800'
+                                                            }`}>
+                                                            #{idx + 1}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Candidate Info */}
+                                                <div className="flex-1 text-center md:text-left min-w-0">
+                                                    <h3 className="text-lg font-bold text-gray-800 truncate">
+                                                        {file.result?.candidateName || file.name}
+                                                    </h3>
+                                                    <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mt-1">
+                                                        {file.result?.currentRole && (
+                                                            <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-medium truncate max-w-[200px]">
+                                                                {file.result.currentRole}
+                                                            </span>
+                                                        )}
+                                                        {file.result?.deepAnalysis?.experienceMatchLevel && (
+                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${file.result.deepAnalysis.experienceMatchLevel === 'High' ? 'bg-green-100 text-green-700' :
+                                                                'bg-gray-100 text-gray-500'
+                                                                }`}>
+                                                                {file.result.deepAnalysis.experienceMatchLevel} Fit
+                                                            </span>
                                                         )}
                                                     </div>
-                                                );
-                                            };
 
-                                            return (
-                                                <tr key={file.id} className="hover:bg-gray-50/50 transition-all group/row">
-                                                    <td className="px-8 py-5 text-sm font-bold text-gray-400">#{idx + 1}</td>
-                                                    <td className="px-8 py-5">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="size-8 rounded-lg bg-blue-50 flex items-center justify-center text-primary font-bold text-xs">
-                                                                {file.result?.candidateName?.charAt(0)?.toUpperCase() || '?'}
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                <p className="text-sm font-bold text-text-main">{file.result?.candidateName || file.name}</p>
-                                                                {file.result?.currentRole && (
-                                                                    <p className="text-xs text-gray-400">{file.result.currentRole}</p>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-5">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden shrink-0">
-                                                                <div
-                                                                    className={`h-full transition-all duration-1000 ${file.status === 'COMPLETED' ? 'bg-primary' :
-                                                                        file.status === 'ERROR' ? 'bg-red-500' : 'bg-blue-200'
-                                                                        }`}
-                                                                    style={{ width: `${file.result?.matchScore || 0}%` }}
-                                                                ></div>
-                                                            </div>
-                                                            <span className={`text-sm font-bold ${file.status === 'ERROR' ? 'text-red-500' : 'text-primary'
-                                                                }`}>
-                                                                {file.result?.matchScore || 0}%
-                                                            </span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-5 text-center">
-                                                        <div className="flex justify-center">
-                                                            {renderScoreRing(file.result?.jdMatchScore || 0, file.result?.jdMatchReason)}
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-5 text-center">
-                                                        <div className="flex justify-center">
-                                                            {renderScoreRing(file.result?.qualificationMatchScore || 0, file.result?.qualificationMatchReason)}
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-5 text-center">
-                                                        <div className="flex justify-center">
-                                                            {renderScoreRing(file.result?.resumeMatchScore || 0, file.result?.resumeMatchReason)}
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-8 py-5">
-                                                        <p className="text-sm text-gray-500 font-medium truncate max-w-lg">
-                                                            {file.status === 'ERROR' ? 'Analysis failed' : file.result?.analysis || 'Processing...'}
+                                                    {isCompleted && (
+                                                        <p className="text-xs text-gray-500 mt-3 line-clamp-2 md:line-clamp-1 leading-relaxed">
+                                                            {file.result?.analysis}
                                                         </p>
-                                                    </td>
-                                                    <td className="px-4 py-5 text-right">
-                                                        <button
-                                                            onClick={() => setSelectedCandidate(file.result)}
-                                                            disabled={file.status !== 'COMPLETED' || !file.result?.deepAnalysis}
-                                                            className="p-2 text-gray-400 hover:text-primary hover:bg-blue-50 rounded-lg transition-all disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-400"
-                                                            title="View Deep Analysis"
-                                                        >
-                                                            <span className="material-symbols-outlined">visibility</span>
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                </tbody>
-                            </table>
+                                                    )}
+                                                </div>
+
+                                                {/* Detailed Metrics */}
+                                                {isCompleted && (
+                                                    <div className="flex items-center gap-6 px-4 py-2 border-l border-r border-gray-50 mx-4">
+                                                        {[
+                                                            { label: 'JD Match', val: file.result?.jdMatchScore, icon: 'description' },
+                                                            { label: 'Skills', val: file.result?.qualificationMatchScore, icon: 'school' },
+                                                            { label: 'Resume', val: file.result?.resumeMatchScore, icon: 'badge' }
+                                                        ].map((metric, mIdx) => (
+                                                            <div key={mIdx} className="flex flex-col items-center gap-1 group/metric cursor-help relative">
+                                                                <div className="relative size-10">
+                                                                    <svg className="size-full rotate-[-90deg]" viewBox="0 0 36 36">
+                                                                        <path className="text-gray-100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                                                                        <path
+                                                                            className={`${metric.val >= 70 ? 'text-blue-500' : 'text-gray-400'}`}
+                                                                            strokeDasharray={`${metric.val || 0}, 100`}
+                                                                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                                                            fill="none"
+                                                                            stroke="currentColor"
+                                                                            strokeWidth="4"
+                                                                            strokeLinecap="round"
+                                                                        />
+                                                                    </svg>
+                                                                    <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-gray-600">
+                                                                        {metric.val}%
+                                                                    </div>
+                                                                </div>
+                                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tight">{metric.label}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {/* Actions */}
+                                                <div className="shrink-0">
+                                                    <button
+                                                        onClick={() => setSelectedCandidate(file.result)}
+                                                        disabled={!isCompleted || !file.result?.deepAnalysis}
+                                                        className="h-10 px-5 bg-gray-900 text-white text-sm font-bold rounded-xl shadow-lg shadow-gray-200 hover:shadow-gray-400 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:shadow-none flex items-center gap-2 group/btn"
+                                                    >
+                                                        <span>Analysis</span>
+                                                        <span className="material-symbols-outlined text-[18px] group-hover/btn:translate-x-1 transition-transform">arrow_forward</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                         </div>
                     )}
                 </div>
@@ -505,7 +613,7 @@ const ResumeScore: React.FC = () => {
             {/* Deep Analysis Modal */}
             {selectedCandidate && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[92vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
                         {/* Header */}
                         <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
                             <div className="flex items-center gap-4">
