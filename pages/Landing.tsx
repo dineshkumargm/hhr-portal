@@ -64,7 +64,7 @@ const Landing: React.FC<LandingProps> = () => {
                                 <span className="text-[#0d33f2] text-xs font-bold uppercase tracking-wide">New AI Engine v2.0</span>
                             </div>
                             <h1 className="text-4xl md:text-5xl lg:text-6xl font-black leading-tight tracking-[-0.033em] text-text-main dark:text-white">
-                                Shortlist Top Talent in <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#0d33f2] to-purple-600">Seconds</span>, Not Hours.
+                                Shortlist Top Talent in <span style={{ backgroundImage: 'linear-gradient(to right, #0d33f2, #9333ea)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>Seconds</span>, Not Hours.
                             </h1>
                             <h2 className="text-base md:text-lg text-text-sub dark:text-gray-400 font-normal leading-relaxed max-w-xl">
                                 The AI Recruiter that never sleeps. Automate your screening process with unbiased, skill-based matching that integrates seamlessly with your ATS.
