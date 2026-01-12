@@ -134,7 +134,7 @@ const Candidates: React.FC<CandidatesProps> = ({ onCandidateClick }) => {
       const matchDate = matchesDateFilter(c.appliedDate);
 
       return matchStatus && matchScore && matchLocation && matchDate;
-    });
+    }).sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
   }, [candidates, filterStatus, filterScoreRange, locationSearch, filterDateRange]);
 
   const selectedJob = jobs.find(j => j.id === selectedJobId);

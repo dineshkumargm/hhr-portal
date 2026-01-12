@@ -38,7 +38,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onLogout, user, acti
       `}>
         <div className="px-3 mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="size-9 flex items-center justify-center bg-gradient-to-br from-[#0d33f2] to-[#1e40af] rounded-xl shadow-lg shadow-blue-500/30 ring-1 ring-white/20">
+            <div
+              className="size-9 flex items-center justify-center bg-blue-600 rounded-xl shadow-lg shadow-blue-500/30 ring-1 ring-white/20"
+              style={{ backgroundColor: '#2563eb' }}
+            >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 2L4 7V17L12 22L20 17V7L12 2Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M12 22V12M12 12V2M12 12H20M12 12L4 7M12 12L20 7" stroke="white" strokeWidth="1.5" strokeOpacity="0.5" strokeLinecap="round" />
