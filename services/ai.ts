@@ -59,17 +59,19 @@ export interface ExtractedResumeDetails {
     jdMatchScore: number;
     qualificationMatchScore: number;
     resumeMatchScore: number;
-    candidateRecordScore: number;
+
     jdMatchReason: string;
     qualificationMatchReason: string;
     resumeMatchReason: string;
-    candidateRecordReason: string;
     deepAnalysis: {
         executiveSummary: string;
         strengths: string[];
         weaknesses: string[];
         missingSkills: string[];
+        skillsMatched: string[];
         experienceRelevance: string;
+        experienceMatchLevel: "Low" | "Medium" | "High";
+        roleSimilarity: "Low" | "Medium" | "High";
         interviewQuestions: string[];
         culturalFit: string;
     };
@@ -168,11 +170,10 @@ export const analyzeResume = async (
                     jdMatchScore: { type: SchemaType.NUMBER },
                     qualificationMatchScore: { type: SchemaType.NUMBER },
                     resumeMatchScore: { type: SchemaType.NUMBER },
-                    candidateRecordScore: { type: SchemaType.NUMBER },
+
                     jdMatchReason: { type: SchemaType.STRING },
                     qualificationMatchReason: { type: SchemaType.STRING },
                     resumeMatchReason: { type: SchemaType.STRING },
-                    candidateRecordReason: { type: SchemaType.STRING },
                     deepAnalysis: {
                         type: SchemaType.OBJECT,
                         properties: {
@@ -189,14 +190,20 @@ export const analyzeResume = async (
                                 type: SchemaType.ARRAY,
                                 items: { type: SchemaType.STRING }
                             },
+                            skillsMatched: {
+                                type: SchemaType.ARRAY,
+                                items: { type: SchemaType.STRING }
+                            },
                             experienceRelevance: { type: SchemaType.STRING },
+                            experienceMatchLevel: { type: SchemaType.STRING, enum: ["Low", "Medium", "High"] },
+                            roleSimilarity: { type: SchemaType.STRING, enum: ["Low", "Medium", "High"] },
                             interviewQuestions: {
                                 type: SchemaType.ARRAY,
                                 items: { type: SchemaType.STRING }
                             },
                             culturalFit: { type: SchemaType.STRING }
                         },
-                        required: ["executiveSummary", "strengths", "weaknesses", "missingSkills", "experienceRelevance", "interviewQuestions", "culturalFit"]
+                        required: ["executiveSummary", "strengths", "weaknesses", "missingSkills", "skillsMatched", "experienceRelevance", "experienceMatchLevel", "roleSimilarity", "interviewQuestions", "culturalFit"]
                     }
                 },
                 required: [
@@ -209,11 +216,10 @@ export const analyzeResume = async (
                     "jdMatchScore",
                     "qualificationMatchScore",
                     "resumeMatchScore",
-                    "candidateRecordScore",
+
                     "jdMatchReason",
                     "qualificationMatchReason",
                     "resumeMatchReason",
-                    "candidateRecordReason",
                     "deepAnalysis"
                 ]
             }
@@ -239,17 +245,18 @@ export const analyzeResume = async (
                 5. jdMatchScore: 0-100 score based purely on the text overlap and semantic match with the Job Description.
                 6. qualificationMatchScore: 0-100 score based on their education and certifications relevance.
                 7. resumeMatchScore: 0-100 score based on the quality, structure, and clarity of the resume content itself.
-                8. candidateRecordScore: 0-100 score based on the completeness and depth of the details provided in the resume.
-                9. jdMatchReason: A concise, one-sentence explanation of why the JD Match score was given (e.g. "Missing critical Python experience but has strong SQL").
-                10. qualificationMatchReason: A concise one-sentence reason for the qualification score (e.g. "Matches Master's requirement but unrelated field").
-                11. resumeMatchReason: A concise one-sentence reason for the resume quality score (e.g. "Clear formatting but lacks quantifiable metrics").
-                12. candidateRecordReason: A concise one-sentence reason for the record completeness (e.g. "Full contact info and links provided").
-                13. deepAnalysis: An object containing:
+                8. jdMatchReason: A concise, one-sentence explanation of why the JD Match score was given (e.g. "Missing critical Python experience but has strong SQL").
+                9. qualificationMatchReason: A concise one-sentence reason for the qualification score (e.g. "Matches Master's requirement but unrelated field").
+                10. resumeMatchReason: A concise one-sentence reason for the resume quality score (e.g. "Clear formatting but lacks quantifiable metrics").
+                11. deepAnalysis: An object containing:
                     - executiveSummary: A 2-3 sentence overview of the candidate's fit.
                     - strengths: Array of 3 key strengths.
                     - weaknesses: Array of 3 potential weaknesses.
+                    - skillsMatched: Array of hard skills found in both JD and Resume.
                     - missingSkills: Array of skills from the JD that are missing.
                     - experienceRelevance: A paragraph analyzing how their past roles match the detailed job requirements.
+                    - experienceMatchLevel: "Low", "Medium", or "High" based on years and relevance.
+                    - roleSimilarity: "Low", "Medium", or "High" based on previous job titles and responsibilities vs target role.
                     - interviewQuestions: Array of 5 technical and behavioral interview questions tailored to their gaps.
                     - culturalFit: A brief assessment of likely cultural fit based on resume tone and activities.
                 

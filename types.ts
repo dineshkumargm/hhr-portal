@@ -52,6 +52,26 @@ export interface Candidate {
   resumeBase64?: string;
   resumeMimeType?: string;
   userId?: string;
+  jdMatchScore?: number;
+  qualificationMatchScore?: number;
+  resumeMatchScore?: number;
+  jdMatchReason?: string;
+  qualificationMatchReason?: string;
+  resumeMatchReason?: string;
+  deepAnalysis?: DeepAnalysis;
+}
+
+export interface DeepAnalysis {
+  executiveSummary: string;
+  strengths: string[];
+  weaknesses: string[];
+  missingSkills: string[];
+  skillsMatched: string[];
+  experienceRelevance: string;
+  experienceMatchLevel: "Low" | "Medium" | "High";
+  roleSimilarity: "Low" | "Medium" | "High";
+  interviewQuestions: string[];
+  culturalFit?: string;
 }
 
 export interface Job {

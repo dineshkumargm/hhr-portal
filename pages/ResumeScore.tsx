@@ -115,11 +115,9 @@ const ResumeScore: React.FC = () => {
                         jdMatchScore: data.jdMatchScore || 0,
                         qualificationMatchScore: data.qualificationMatchScore || 0,
                         resumeMatchScore: data.resumeMatchScore || 0,
-                        candidateRecordScore: data.candidateRecordScore || 0,
                         jdMatchReason: data.jdMatchReason || "Analysis not available",
                         qualificationMatchReason: data.qualificationMatchReason || "Analysis not available",
                         resumeMatchReason: data.resumeMatchReason || "Analysis not available",
-                        candidateRecordReason: data.candidateRecordReason || "Analysis not available",
                         deepAnalysis: data.deepAnalysis,
                         associatedJdId: selectedJobId,
                         analysis: data.analysis,
@@ -374,7 +372,6 @@ const ResumeScore: React.FC = () => {
                                         <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">JD Match</th>
                                         <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">Qual Match</th>
                                         <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">Res Match</th>
-                                        <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">Rec Score</th>
                                         <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Summary</th>
                                         <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-right">Actions</th>
                                     </tr>
@@ -481,11 +478,6 @@ const ResumeScore: React.FC = () => {
                                                             {renderScoreRing(file.result?.resumeMatchScore || 0, file.result?.resumeMatchReason)}
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-5 text-center">
-                                                        <div className="flex justify-center">
-                                                            {renderScoreRing(file.result?.candidateRecordScore || 0, file.result?.candidateRecordReason)}
-                                                        </div>
-                                                    </td>
                                                     <td className="px-8 py-5">
                                                         <p className="text-sm text-gray-500 font-medium truncate max-w-lg">
                                                             {file.status === 'ERROR' ? 'Analysis failed' : file.result?.analysis || 'Processing...'}
@@ -534,12 +526,11 @@ const ResumeScore: React.FC = () => {
                         </div>
 
                         {/* Score Overview on Top */}
-                        <div className="grid grid-cols-4 gap-4 p-6 bg-white border-b border-gray-100">
+                        <div className="grid grid-cols-3 gap-4 p-6 bg-white border-b border-gray-100">
                             {[
                                 { label: 'JD Match', score: selectedCandidate.jdMatchScore, reason: selectedCandidate.jdMatchReason },
                                 { label: 'Qualification', score: selectedCandidate.qualificationMatchScore, reason: selectedCandidate.qualificationMatchReason },
-                                { label: 'Resume Quality', score: selectedCandidate.resumeMatchScore, reason: selectedCandidate.resumeMatchReason },
-                                { label: 'Candidate Record', score: selectedCandidate.candidateRecordScore, reason: selectedCandidate.candidateRecordReason }
+                                { label: 'Resume Quality', score: selectedCandidate.resumeMatchScore, reason: selectedCandidate.resumeMatchReason }
                             ].map((item, idx) => (
                                 <div key={idx} className="flex flex-col items-center p-4 rounded-xl bg-gray-50 border border-gray-100">
                                     <div className="relative size-16 flex items-center justify-center mb-2">
@@ -624,15 +615,46 @@ const ResumeScore: React.FC = () => {
                                         )) || <p className="text-sm text-gray-400 italic">No missing skills identified.</p>}
                                     </div>
                                 </div>
+
+                                {/* Matched Skills */}
+                                <div className="space-y-3 col-span-1 md:col-span-3">
+                                    <h3 className="text-xs font-bold text-blue-600 uppercase tracking-widest flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-sm">verified</span>
+                                        Matched Skills
+                                    </h3>
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedCandidate.deepAnalysis?.skillsMatched?.map((item: string, i: number) => (
+                                            <span key={i} className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg border border-blue-100">
+                                                {item}
+                                            </span>
+                                        )) || <p className="text-sm text-gray-400 italic">No specific skills matched.</p>}
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Analysis & Fit */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
-                                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-sm">history_edu</span>
-                                        Experience Relevance
+                                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center justify-between">
+                                        <div className="flex items-center gap-2"><span className="material-symbols-outlined text-sm">history_edu</span> Experience Relevance</div>
+                                        {selectedCandidate.deepAnalysis?.experienceMatchLevel && (
+                                            <span className={`px-2 py-0.5 rounded text-[10px] uppercase border ${selectedCandidate.deepAnalysis.experienceMatchLevel === 'High' ? 'bg-green-100 text-green-700 border-green-200' :
+                                                selectedCandidate.deepAnalysis.experienceMatchLevel === 'Medium' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                                                    'bg-red-100 text-red-700 border-red-200'
+                                                }`}>{selectedCandidate.deepAnalysis.experienceMatchLevel} Match</span>
+                                        )}
                                     </h3>
+                                    <div className="mb-3">
+                                        {selectedCandidate.deepAnalysis?.roleSimilarity && (
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="text-[10px] font-bold text-gray-400 uppercase">Role Similarity:</span>
+                                                <span className={`text-[10px] font-bold ${selectedCandidate.deepAnalysis.roleSimilarity === 'High' ? 'text-green-600' :
+                                                    selectedCandidate.deepAnalysis.roleSimilarity === 'Medium' ? 'text-yellow-600' :
+                                                        'text-red-600'
+                                                    }`}>{selectedCandidate.deepAnalysis.roleSimilarity}</span>
+                                            </div>
+                                        )}
+                                    </div>
                                     <p className="text-sm text-gray-600 leading-relaxed">
                                         {selectedCandidate.deepAnalysis?.experienceRelevance || "Not available."}
                                     </p>

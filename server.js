@@ -107,6 +107,13 @@ const CandidateSchema = new mongoose.Schema({
     analysis: String,
     resumeBase64: String,
     resumeMimeType: String,
+    jdMatchScore: Number,
+    qualificationMatchScore: Number,
+    resumeMatchScore: Number,
+    jdMatchReason: String,
+    qualificationMatchReason: String,
+    resumeMatchReason: String,
+    deepAnalysis: Object,
     userId: String
 }, { toJSON: { virtuals: true }, toObject: { virtuals: true } });
 
@@ -241,6 +248,17 @@ app.post('/api/candidates', async (req, res) => {
         res.json(candidate);
     } catch (err) {
         console.error('Candidate save error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/candidates/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await Candidate.findOneAndDelete({ id });
+        if (!result) return res.status(404).json({ error: 'Candidate not found' });
+        res.json({ message: 'Candidate deleted successfully' });
+    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });

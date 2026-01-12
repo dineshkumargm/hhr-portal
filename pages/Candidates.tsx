@@ -362,7 +362,7 @@ const Candidates: React.FC<CandidatesProps> = ({ onCandidateClick }) => {
                     <th className="px-3 py-6 text-left text-[11px] font-bold text-text-tertiary uppercase tracking-widest">Parsed Role</th>
                     <th className="px-3 py-6 text-left text-[11px] font-bold text-text-tertiary uppercase tracking-widest">Date Stored</th>
                     <th className="px-3 py-6 text-left text-[11px] font-bold text-text-tertiary uppercase tracking-widest">Pipeline</th>
-                    <th className="px-3 py-6 text-center text-[11px] font-bold text-text-tertiary uppercase tracking-widest">AI Match</th>
+                    <th className="px-3 py-6 text-center text-[11px] font-bold text-text-tertiary uppercase tracking-widest">Match</th>
                     <th className="relative py-6 pl-3 pr-10"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>

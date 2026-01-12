@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../services/db';
 import { Candidate } from '../types';
 
 const CandidateDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [loading, setLoading] = useState(true);
   const [showResume, setShowResume] = useState(false);
@@ -31,6 +32,19 @@ const CandidateDetail: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleDelete = async () => {
+    if (!id) return;
+    if (window.confirm('Are you sure you want to delete this candidate permanently?')) {
+      try {
+        await db.candidates.deleteOne(id);
+        navigate('/candidates');
+      } catch (error) {
+        console.error('Failed to delete candidate:', error);
+        alert('Failed to delete candidate. Please try again.');
+      }
+    }
   };
 
   if (loading) {
@@ -145,7 +159,12 @@ const CandidateDetail: React.FC = () => {
             </div>
             <div className="flex gap-3 md:gap-4 mt-6">
               <button className="flex-1 bg-primary text-white py-3 md:py-3.5 rounded-xl md:rounded-2xl text-[10px] md:text-xs font-bold hover:bg-primary-hover shadow-lg active:scale-95 transition-all">Interview</button>
-              <button className="flex-1 bg-white border border-red-100 text-accent-red py-3 md:py-3.5 rounded-xl md:rounded-2xl text-[10px] md:text-xs font-bold hover:bg-red-50 transition-all">Reject</button>
+              <button
+                onClick={handleDelete}
+                className="flex-1 bg-white border border-red-100 text-accent-red py-3 md:py-3.5 rounded-xl md:rounded-2xl text-[10px] md:text-xs font-bold hover:bg-red-50 transition-all flex items-center justify-center gap-2"
+              >
+                <span className="material-symbols-outlined text-[16px]">delete</span> Delete
+              </button>
             </div>
           </div>
         </div>
@@ -154,12 +173,11 @@ const CandidateDetail: React.FC = () => {
           <h3 className="text-xl md:text-2xl font-bold text-text-main tracking-tight mb-6 md:mb-8">Detailed Analysis</h3>
 
           {/* Score Overview Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
             {[
               { label: 'JD Match', score: candidate.jdMatchScore || 0, reason: candidate.jdMatchReason },
               { label: 'Qualification', score: candidate.qualificationMatchScore || 0, reason: candidate.qualificationMatchReason },
-              { label: 'Resume Quality', score: candidate.resumeMatchScore || 0, reason: candidate.resumeMatchReason },
-              { label: 'Candidate Record', score: candidate.candidateRecordScore || 0, reason: candidate.candidateRecordReason }
+              { label: 'Resume Quality', score: candidate.resumeMatchScore || 0, reason: candidate.resumeMatchReason }
             ].map((item, idx) => (
               <div key={idx} className="flex flex-col items-center p-4 rounded-3xl bg-background-main border border-blue-50/50">
                 <div className="relative size-16 md:size-20 flex items-center justify-center mb-3">
@@ -244,14 +262,45 @@ const CandidateDetail: React.FC = () => {
                   )) || <span className="text-sm text-text-tertiary italic">No missing skills.</span>}
                 </div>
               </div>
+
+              {/* Matched Skills */}
+              <div className="p-5 md:p-6 bg-blue-50/30 rounded-[1.5rem] border border-blue-50 col-span-1 md:col-span-3">
+                <h4 className="text-xs font-bold text-blue-700 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-sm">verified</span> Matched Skills
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {candidate.deepAnalysis?.skillsMatched?.map((item, i) => (
+                    <span key={i} className="px-3 py-1.5 bg-white border border-blue-100 text-blue-700 text-xs font-bold rounded-xl shadow-sm">
+                      {item}
+                    </span>
+                  )) || <span className="text-sm text-text-tertiary italic">No specific skills matched.</span>}
+                </div>
+              </div>
             </div>
 
             {/* Experience & Culture */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
               <div className="p-6 bg-background-main rounded-[1.5rem] border border-blue-50">
-                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-sm">history_edu</span> Experience Relevance
+                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-widest mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2"><span className="material-symbols-outlined text-sm">history_edu</span> Experience Relevance</div>
+                  {candidate.deepAnalysis?.experienceMatchLevel && (
+                    <span className={`px-2 py-0.5 rounded text-[10px] uppercase border ${candidate.deepAnalysis.experienceMatchLevel === 'High' ? 'bg-green-100 text-green-700 border-green-200' :
+                      candidate.deepAnalysis.experienceMatchLevel === 'Medium' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' :
+                        'bg-red-100 text-red-700 border-red-200'
+                      }`}>{candidate.deepAnalysis.experienceMatchLevel} Match</span>
+                  )}
                 </h4>
+                <div className="mb-3">
+                  {candidate.deepAnalysis?.roleSimilarity && (
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[10px] font-bold text-text-tertiary uppercase">Role Similarity:</span>
+                      <span className={`text-[10px] font-bold ${candidate.deepAnalysis.roleSimilarity === 'High' ? 'text-green-600' :
+                        candidate.deepAnalysis.roleSimilarity === 'Medium' ? 'text-yellow-600' :
+                          'text-red-600'
+                        }`}>{candidate.deepAnalysis.roleSimilarity}</span>
+                    </div>
+                  )}
+                </div>
                 <p className="text-xs md:text-sm text-text-main leading-relaxed">
                   {candidate.deepAnalysis?.experienceRelevance || 'Not available.'}
                 </p>
