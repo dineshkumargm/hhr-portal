@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/db';
 import { Job, Candidate } from '../types';
-import { analyzeResume, fileToBase64 } from '../services/ai';
+import { analyzeResume, fileToBase64, extractJobDetailsFromPDF, ExtractedJobDetails } from '../services/ai';
 
 interface UploadFile {
     id: string;
@@ -20,6 +20,12 @@ const ResumeScore: React.FC = () => {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [selectedCandidate, setSelectedCandidate] = useState<any | null>(null);
+
+    // New State for JD Upload
+    const [jobSource, setJobSource] = useState<'database' | 'upload'>('database');
+    const [uploadedJdFile, setUploadedJdFile] = useState<File | null>(null);
+    const [parsedJd, setParsedJd] = useState<ExtractedJobDetails | null>(null);
+    const [isParsingJd, setIsParsingJd] = useState(false);
 
     useEffect(() => {
         const fetchJobs = async () => {
@@ -45,41 +51,86 @@ const ResumeScore: React.FC = () => {
         setFiles(prev => [...prev, ...newFiles]);
     };
 
+    const handleJdUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploadedJdFile(file);
+        setParsedJd(null);
+        setIsParsingJd(true);
+        setErrorMsg(null);
+
+        try {
+            console.log("[JD PARSE] Starting analysis of uploaded JD:", file.name);
+            const details = await extractJobDetailsFromPDF(file);
+            console.log("[JD PARSE] Success:", details);
+            setParsedJd(details);
+        } catch (err: any) {
+            console.error("[JD PARSE] Failed:", err);
+            setErrorMsg(`Failed to parse Job Description: ${err.message}. Please try a clearer PDF.`);
+            setUploadedJdFile(null); // Reset on error
+        } finally {
+            setIsParsingJd(false);
+        }
+    };
+
     const removeFile = (id: string) => {
         setFiles(prev => prev.filter(f => f.id !== id));
     };
 
     const startAnalysis = async () => {
-        console.log("[RESUME SCORE] Starting analysis. Files count:", files.length, "Job ID:", selectedJobId);
+        console.log("[RESUME SCORE] Starting analysis. Files count:", files.length, "Source:", jobSource);
         setErrorMsg(null);
 
-        if (!selectedJobId || files.length === 0) {
-            console.warn("[RESUME SCORE] Missing job selection or files.");
-            setErrorMsg("Please select a job and upload at least one resume.");
+        // Validation based on source
+        if (jobSource === 'database' && !selectedJobId) {
+            setErrorMsg("Please select a job from the list.");
+            return;
+        }
+        if (jobSource === 'upload' && !parsedJd) {
+            setErrorMsg("Please upload and let AI parse a Job Description first.");
+            return;
+        }
+        if (files.length === 0) {
+            setErrorMsg("Please upload at least one resume.");
             return;
         }
 
         setIsAnalyzing(true);
         try {
-            const allJobs = await db.jobs.find();
-            const currentJob = allJobs.find(j => j.id === selectedJobId);
+            // Determine Job Context
+            let jobContext: { title: string, skills: string[], description?: string, location?: string } | null = null;
+            let currentJobId = selectedJobId;
 
-            if (!currentJob) {
-                console.error("[RESUME SCORE] Selected job not found in DB:", selectedJobId);
-                setErrorMsg("The selected job could not be found in the database. Please refresh.");
-                setIsAnalyzing(false);
-                return;
+            if (jobSource === 'database') {
+                const allJobs = await db.jobs.find();
+                const job = allJobs.find(j => j.id === selectedJobId);
+                if (!job) throw new Error("Selected job not found in database.");
+                jobContext = {
+                    title: job.title,
+                    skills: job.skills || [],
+                    description: job.description,
+                    location: job.location
+                };
+            } else {
+                // Upload Source
+                if (!parsedJd) throw new Error("No parsed JD available.");
+                jobContext = {
+                    title: parsedJd.title,
+                    skills: parsedJd.skills,
+                    description: `Department: ${parsedJd.department}. Type: ${parsedJd.type}. ${parsedJd.title}.`,
+                    location: parsedJd.location
+                };
+                currentJobId = 'temp-uploaded-jd'; // Placeholder ID for uploaded context
             }
 
-            console.log("[RESUME SCORE] Target job found:", currentJob.title);
+            console.log("[RESUME SCORE] Using Job Context:", jobContext.title);
 
             for (let i = 0; i < files.length; i++) {
                 const currentFile = files[i];
                 if (currentFile.status === 'COMPLETED') continue;
 
-                // THROTTLE: Wait 3 seconds between requests (Free Tier Limit: 15 RPM)
                 if (i > 0) {
-                    console.log(`[RESUME SCORE] Throttling for 3s...`);
                     await new Promise(r => setTimeout(r, 3000));
                 }
 
@@ -87,18 +138,15 @@ const ResumeScore: React.FC = () => {
                 setFiles(prev => prev.map((f, idx) => idx === i ? { ...f, status: 'READING', progress: 10 } : f));
 
                 try {
-                    console.log(`[RESUME SCORE] Sending ${currentFile.name} to Gemini...`);
                     setFiles(prev => prev.map((f, idx) => idx === i ? { ...f, status: 'PARSING', progress: 30 } : f));
 
                     const data = await analyzeResume(currentFile.file, {
-                        title: currentJob.title,
-                        skills: currentJob.skills || [],
-                        description: currentJob.description
+                        title: jobContext.title,
+                        skills: jobContext.skills,
+                        description: jobContext.description
                     });
 
                     const matchScore = Number(data.matchScore) || 0;
-                    console.log(`[RESUME SCORE] AI Analysis received for ${currentFile.name}: ${matchScore}%`);
-
                     setFiles(prev => prev.map((f, idx) => idx === i ? { ...f, progress: 80 } : f));
 
                     const base64Data = await fileToBase64(currentFile.file);
@@ -106,9 +154,9 @@ const ResumeScore: React.FC = () => {
                     const newCandidate: Candidate = {
                         id: `c-${Date.now()}-${i}`,
                         name: data.candidateName || currentFile.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, ' '),
-                        role: data.currentRole || currentJob.title,
+                        role: data.currentRole || jobContext.title,
                         company: 'Extracted Profile',
-                        location: currentJob.location || 'Remote',
+                        location: jobContext.location || 'Remote',
                         appliedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
                         status: 'New',
                         matchScore: matchScore,
@@ -119,9 +167,8 @@ const ResumeScore: React.FC = () => {
                         qualificationMatchReason: data.qualificationMatchReason || "Analysis not available",
                         resumeMatchReason: data.resumeMatchReason || "Analysis not available",
                         deepAnalysis: data.deepAnalysis,
-                        associatedJdId: selectedJobId,
+                        associatedJdId: currentJobId,
                         analysis: data.analysis,
-                        // SAFETY: If file > 1MB, do not send Base64 to DB to avoid Vercel 4.5MB Payload Limit (500 Error)
                         resumeBase64: (currentFile.file.size < 1 * 1024 * 1024) ? base64Data : "",
                         resumeMimeType: currentFile.file.type
                     };
@@ -129,16 +176,21 @@ const ResumeScore: React.FC = () => {
                     console.log(`[RESUME SCORE] Saving candidate ${newCandidate.name} to DB...`);
                     await db.candidates.insertOne(newCandidate);
 
-                    console.log(`[RESUME SCORE] Updating job stats for ${currentJob.title}...`);
-                    await db.jobs.updateOne(currentJob.id, {
-                        applicantsCount: (currentJob.applicantsCount || 0) + 1,
-                        matchesCount: (matchScore > 80) ? (currentJob.matchesCount || 0) + 1 : (currentJob.matchesCount || 0)
-                    });
+                    // Only update job stats if it's a real database job
+                    if (jobSource === 'database') {
+                        const allJobs = await db.jobs.find(); // Re-fetch to be safe
+                        const currentJob = allJobs.find(j => j.id === selectedJobId);
+                        if (currentJob) {
+                            await db.jobs.updateOne(currentJob.id, {
+                                applicantsCount: (currentJob.applicantsCount || 0) + 1,
+                                matchesCount: (matchScore > 80) ? (currentJob.matchesCount || 0) + 1 : (currentJob.matchesCount || 0)
+                            });
+                        }
+                    }
 
                     setFiles(prev => prev.map((f, idx) => idx === i ?
                         { ...f, status: 'COMPLETED', progress: 100, result: data } : f));
 
-                    console.log(`[RESUME SCORE] Successfully processed ${currentFile.name}`);
                 } catch (err: any) {
                     console.error(`[RESUME SCORE] Error processing ${currentFile.name}:`, err);
                     setFiles(prev => prev.map((f, idx) => idx === i ?
@@ -186,82 +238,173 @@ const ResumeScore: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Left Card: Job Selection */}
                 <div className="flex flex-col gap-3">
-                    <div className="flex items-center gap-2 text-gray-500 font-bold px-2">
-                        <span className="material-symbols-outlined text-[20px]">business_center</span>
-                        <span className="text-sm">Select Job</span>
+                    <div className="flex items-center justify-between px-2">
+                        <div className="flex items-center gap-2 text-gray-500 font-bold">
+                            <span className="material-symbols-outlined text-[20px]">business_center</span>
+                            <span className="text-sm">Job Context</span>
+                        </div>
                     </div>
-                    <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm min-h-[500px] flex flex-col">
-                        {jobs.length === 0 ? (
-                            <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
-                                <div className="size-16 bg-gray-50 rounded-xl flex items-center justify-center text-gray-300 mb-4">
-                                    <span className="material-symbols-outlined text-[40px]">work_off</span>
-                                </div>
-                                <p className="text-sm text-gray-400 font-medium mb-2">No jobs available</p>
-                                <p className="text-xs text-gray-300">Create a job first to score resumes</p>
-                            </div>
-                        ) : (
-                            <>
-                                <label className="block mb-4">
-                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Select Job Position</span>
-                                    <select
-                                        value={selectedJobId}
-                                        onChange={(e) => setSelectedJobId(e.target.value)}
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                                    >
-                                        {jobs.map(job => (
-                                            <option key={job.id} value={job.id}>
-                                                {job.title} - {job.department} ({job.location})
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
 
-                                {selectedJobId && (
-                                    <div className="flex-1 bg-gray-50 rounded-xl p-4 border border-gray-100">
-                                        <div className="mb-3">
-                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Job Details</span>
+                    <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm min-h-[500px] flex flex-col">
+                        {/* Source Toggle Tabs */}
+                        <div className="flex p-1 bg-gray-100 rounded-xl mb-6">
+                            <button
+                                onClick={() => setJobSource('database')}
+                                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${jobSource === 'database' ? 'bg-white text-primary shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                Select Existing Job
+                            </button>
+                            <button
+                                onClick={() => setJobSource('upload')}
+                                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${jobSource === 'upload' ? 'bg-white text-primary shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                Upload JD File
+                            </button>
+                        </div>
+
+                        {jobSource === 'database' ? (
+                            // Existing Job Selection UI
+                            <>
+                                {jobs.length === 0 ? (
+                                    <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
+                                        <div className="size-16 bg-gray-50 rounded-xl flex items-center justify-center text-gray-300 mb-4">
+                                            <span className="material-symbols-outlined text-[40px]">work_off</span>
                                         </div>
-                                        {(() => {
-                                            const selectedJob = jobs.find(j => j.id === selectedJobId);
-                                            if (!selectedJob) return null;
-                                            return (
-                                                <div className="space-y-2">
-                                                    <div>
-                                                        <span className="text-xs text-gray-400 font-medium">Title:</span>
-                                                        <p className="text-sm font-bold text-gray-700">{selectedJob.title}</p>
-                                                    </div>
-                                                    <div>
-                                                        <span className="text-xs text-gray-400 font-medium">Department:</span>
-                                                        <p className="text-sm font-medium text-gray-600">{selectedJob.department}</p>
-                                                    </div>
-                                                    <div>
-                                                        <span className="text-xs text-gray-400 font-medium">Location:</span>
-                                                        <p className="text-sm font-medium text-gray-600">{selectedJob.location}</p>
-                                                    </div>
-                                                    {selectedJob.skills && selectedJob.skills.length > 0 && (
-                                                        <div>
-                                                            <span className="text-xs text-gray-400 font-medium">Skills:</span>
-                                                            <div className="flex flex-wrap gap-1 mt-1">
-                                                                {selectedJob.skills.map((skill, idx) => (
-                                                                    <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-lg">
-                                                                        {skill}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    {selectedJob.description && (
-                                                        <div className="mt-3 pt-3 border-t border-gray-200">
-                                                            <span className="text-xs text-gray-400 font-medium">Description:</span>
-                                                            <p className="text-xs text-gray-600 mt-1 line-clamp-4">{selectedJob.description}</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })()}
+                                        <p className="text-sm text-gray-400 font-medium mb-2">No jobs available</p>
+                                        <p className="text-xs text-gray-300">Create a job first to score resumes</p>
                                     </div>
+                                ) : (
+                                    <>
+                                        <label className="block mb-4">
+                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block">Select Job Position</span>
+                                            <select
+                                                value={selectedJobId}
+                                                onChange={(e) => setSelectedJobId(e.target.value)}
+                                                className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                            >
+                                                {jobs.map(job => (
+                                                    <option key={job.id} value={job.id}>
+                                                        {job.title} - {job.department} ({job.location})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </label>
+
+                                        {selectedJobId && (
+                                            <div className="flex-1 bg-gray-50 rounded-xl p-4 border border-gray-100 overflow-y-auto max-h-[400px]">
+                                                <div className="mb-3">
+                                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Job Details</span>
+                                                </div>
+                                                {(() => {
+                                                    const selectedJob = jobs.find(j => j.id === selectedJobId);
+                                                    if (!selectedJob) return null;
+                                                    return (
+                                                        <div className="space-y-2">
+                                                            <div>
+                                                                <span className="text-xs text-gray-400 font-medium">Title:</span>
+                                                                <p className="text-sm font-bold text-gray-700">{selectedJob.title}</p>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-xs text-gray-400 font-medium">Department:</span>
+                                                                <p className="text-sm font-medium text-gray-600">{selectedJob.department}</p>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-xs text-gray-400 font-medium">Location:</span>
+                                                                <p className="text-sm font-medium text-gray-600">{selectedJob.location}</p>
+                                                            </div>
+                                                            {selectedJob.skills && selectedJob.skills.length > 0 && (
+                                                                <div>
+                                                                    <span className="text-xs text-gray-400 font-medium">Skills:</span>
+                                                                    <div className="flex flex-wrap gap-1 mt-1">
+                                                                        {selectedJob.skills.map((skill, idx) => (
+                                                                            <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-lg">
+                                                                                {skill}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            {selectedJob.description && (
+                                                                <div className="mt-3 pt-3 border-t border-gray-200">
+                                                                    <span className="text-xs text-gray-400 font-medium">Description:</span>
+                                                                    <p className="text-xs text-gray-600 mt-1 line-clamp-4">{selectedJob.description}</p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                             </>
+                        ) : (
+                            // Upload JD UI
+                            <div className="flex-1 flex flex-col">
+                                {!parsedJd && !isParsingJd ? (
+                                    <label className="flex-1 border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer hover:bg-gray-50/50 hover:border-blue-200 transition-all group p-8 bg-gray-50/30">
+                                        <input type="file" accept=".pdf" className="hidden" onChange={handleJdUpload} />
+                                        <div className="size-16 rounded-full bg-purple-50 text-purple-500 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm group-hover:shadow-purple-200">
+                                            <span className="material-symbols-outlined text-3xl">upload_file</span>
+                                        </div>
+                                        <h3 className="text-base font-bold text-gray-700 mb-1">Upload JD File</h3>
+                                        <p className="text-gray-400 text-xs font-bold uppercase tracking-wider">PDF Only (Max 5MB)</p>
+                                        <p className="text-xs text-purple-400 mt-4 px-4">AI will extract title, skills, and requirements automatically.</p>
+                                    </label>
+                                ) : isParsingJd ? (
+                                    <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+                                        <div className="size-16 border-4 border-purple-100 border-t-purple-500 rounded-full animate-spin mb-6"></div>
+                                        <h3 className="text-lg font-bold text-gray-800 mb-2">Analyzing Job Description...</h3>
+                                        <p className="text-sm text-gray-500">Extracting key requirements and skills context.</p>
+                                    </div>
+                                ) : parsedJd && (
+                                    <div className="flex-1 flex flex-col">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div className="flex items-center gap-2 text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border border-green-100">
+                                                <span className="material-symbols-outlined text-sm">check_circle</span>
+                                                <span className="text-xs font-bold uppercase tracking-wider">JD Parsed Successfully</span>
+                                            </div>
+                                            <button
+                                                onClick={() => { setParsedJd(null); setUploadedJdFile(null); }}
+                                                className="text-xs font-bold text-red-400 hover:text-red-600 px-2 py-1"
+                                            >
+                                                REMOVE
+                                            </button>
+                                        </div>
+
+                                        <div className="flex-1 bg-purple-50/50 rounded-xl p-5 border border-purple-100 overflow-y-auto max-h-[400px]">
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <span className="text-xs font-bold text-purple-400 uppercase tracking-widest">Job Title</span>
+                                                    <h3 className="text-lg font-black text-gray-800 leading-tight mt-1">{parsedJd.title}</h3>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Department</span>
+                                                        <p className="text-sm font-medium text-gray-700 mt-0.5">{parsedJd.department}</p>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Location</span>
+                                                        <p className="text-sm font-medium text-gray-700 mt-0.5">{parsedJd.location}</p>
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Required Skills</span>
+                                                    <div className="flex flex-wrap gap-1.5 mt-2">
+                                                        {parsedJd.skills.map((skill, idx) => (
+                                                            <span key={idx} className="px-2.5 py-1 bg-white border border-purple-100 text-purple-700 text-xs font-bold rounded-lg shadow-sm">
+                                                                {skill}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         )}
                     </div>
                 </div>
@@ -330,7 +473,7 @@ const ResumeScore: React.FC = () => {
                         {/* Score Action Button */}
                         <button
                             onClick={startAnalysis}
-                            disabled={isAnalyzing || files.length === 0 || !selectedJobId || jobs.length === 0}
+                            disabled={isAnalyzing || files.length === 0 || (jobSource === 'database' && (!selectedJobId || jobs.length === 0)) || (jobSource === 'upload' && !parsedJd)}
                             className="w-full bg-primary hover:bg-primary-hover disabled:bg-gray-100 disabled:text-gray-400 text-white h-14 rounded-xl font-bold flex items-center justify-center gap-3 transition-all active:scale-[0.98] shadow-lg shadow-blue-500/20 disabled:shadow-none"
                         >
                             {isAnalyzing ? (
@@ -352,154 +495,154 @@ const ResumeScore: React.FC = () => {
                 </div>
 
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden min-h-[300px] flex flex-col">
-                    {files.length === 0 || files.every(f => f.status === 'READY') ? (
-                        <div className="flex-1 flex flex-col items-center justify-center p-20 text-center">
-                            <div className="size-16 bg-gray-50 rounded-xl flex items-center justify-center text-gray-200 mb-6">
-                                <span className="material-symbols-outlined text-[40px]">grid_view</span>
+                    <div className="flex flex-col gap-8 pb-10">
+                        {files.length === 0 || files.every(f => f.status === 'READY') ? (
+                            <div className="bg-white/50 backdrop-blur-xl rounded-[2rem] border border-white/40 shadow-xl shadow-blue-500/5 flex-1 flex flex-col items-center justify-center p-24 text-center">
+                                <div className="size-24 bg-gradient-to-tr from-blue-50 to-indigo-100 rounded-[2rem] flex items-center justify-center text-primary mb-8 animate-pulse shadow-inner">
+                                    <span className="material-symbols-outlined text-[52px]">analytics</span>
+                                </div>
+                                <h3 className="text-2xl font-bold text-gray-800 mb-3 tracking-tight">Ready to analyze</h3>
+                                <p className="text-gray-400 font-medium max-w-sm mx-auto leading-relaxed">
+                                    Upload resumes and select a job to see advanced AI-driven candidate matching insights.
+                                </p>
                             </div>
-                            <p className="text-gray-400 font-medium max-w-sm">
-                                Upload resumes and click 'Score Resumes' to see analysis here.
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead>
-                                    <tr className="bg-gray-50/50 border-b border-gray-100">
-                                        <th className="px-8 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Rank</th>
-                                        <th className="px-8 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Candidate</th>
-                                        <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Match Score</th>
-                                        <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">JD Match</th>
-                                        <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">Qual Match</th>
-                                        <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">Res Match</th>
-                                        <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Summary</th>
-                                        <th className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {files
-                                        .filter(f => f.status !== 'READY')
-                                        .sort((a, b) => (b.result?.matchScore || 0) - (a.result?.matchScore || 0))
-                                        .map((file, idx) => {
-                                            const renderScoreRing = (score: number, reason: string) => {
-                                                const radius = 18;
-                                                const stroke = 3;
-                                                const normalizedRadius = radius - stroke * 2;
-                                                const circumference = normalizedRadius * 2 * Math.PI;
-                                                const strokeDashoffset = circumference - (score / 100) * circumference;
+                        ) : (
+                            <div className="space-y-6">
+                                {files
+                                    .filter(f => f.status !== 'READY')
+                                    .sort((a, b) => (b.result?.matchScore || 0) - (a.result?.matchScore || 0))
+                                    .map((file, idx) => {
+                                        const score = file.result?.matchScore || 0;
+                                        const isHigh = score >= 80;
+                                        const isMid = score >= 50;
 
-                                                let colorClass = "text-red-500";
-                                                if (score >= 80) colorClass = "text-green-500";
-                                                else if (score >= 50) colorClass = "text-yellow-500";
+                                        const scoreColor = isHigh ? 'text-emerald-500' : isMid ? 'text-amber-500' : 'text-rose-500';
+                                        const scoreBg = isHigh ? 'bg-emerald-500' : isMid ? 'bg-amber-500' : 'bg-rose-500';
 
-                                                return (
-                                                    <div className="group relative flex items-center justify-center cursor-help">
-                                                        <div className="relative size-12 flex items-center justify-center">
-                                                            <svg height={radius * 2} width={radius * 2} className="rotate-[-90deg]">
-                                                                <circle
-                                                                    stroke="currentColor"
-                                                                    fill="transparent"
-                                                                    strokeWidth={stroke}
-                                                                    strokeDasharray={circumference + ' ' + circumference}
-                                                                    style={{ strokeDashoffset }}
-                                                                    r={normalizedRadius}
-                                                                    cx={radius}
-                                                                    cy={radius}
-                                                                    className={`${colorClass} transition-all duration-1000 ease-out`}
-                                                                />
-                                                                <circle
-                                                                    stroke="#e5e7eb"
-                                                                    fill="transparent"
-                                                                    strokeWidth={stroke}
-                                                                    r={normalizedRadius}
-                                                                    cx={radius}
-                                                                    cy={radius}
-                                                                    className="opacity-20 absolute top-0 left-0"
-                                                                    style={{ zIndex: -1 }}
-                                                                />
-                                                            </svg>
-                                                            <span className={`absolute text-[10px] font-bold ${colorClass}`}>{score}%</span>
-                                                        </div>
+                                        const renderMetric = (label: string, value: number, reason: string) => (
+                                            <div className="group/metric relative flex flex-col items-center gap-1.5 p-3 rounded-2xl hover:bg-gray-50/80 transition-all cursor-default w-24">
+                                                <div className="relative size-12 flex items-center justify-center">
+                                                    <svg className="size-full rotate-[-90deg]" viewBox="0 0 40 40">
+                                                        <circle cx="20" cy="20" r="18" fill="transparent" stroke="currentColor" strokeWidth="3" strokeDasharray={`${2 * Math.PI * 18}`} strokeDashoffset={`${2 * Math.PI * 18 * (1 - value / 100)}`} className={`${value >= 80 ? 'text-emerald-400' : value >= 50 ? 'text-amber-400' : 'text-rose-400'} transition-all duration-1000`} />
+                                                        <circle cx="20" cy="20" r="18" fill="transparent" stroke="gray" strokeWidth="3" strokeOpacity="0.08" />
+                                                    </svg>
+                                                    <span className="absolute text-[10px] font-black text-gray-700 tracking-tighter">{value}%</span>
+                                                </div>
+                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</span>
 
-                                                        {reason && (
-                                                            <div className="absolute bottom-full mb-2 hidden group-hover:block w-48 p-2 bg-gray-900 text-white text-[10px] rounded-lg shadow-xl z-50 text-center pointer-events-none">
-                                                                {reason}
-                                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
-                                                            </div>
-                                                        )}
+                                                {/* Refined Tooltip: Better positioning and logic */}
+                                                <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 w-48 opacity-0 group-hover/metric:opacity-100 pointer-events-none transition-all duration-300 transform translate-y-2 group-hover/metric:translate-y-0 z-[60]">
+                                                    <div className="bg-gray-900/95 backdrop-blur-md text-white text-[10px] p-4 rounded-[1.5rem] shadow-2xl border border-white/10 leading-relaxed text-center">
+                                                        <div className="font-bold mb-1.5 opacity-40 uppercase tracking-[0.2em] text-[8px]">{label} Analysis</div>
+                                                        {reason}
+                                                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-[8px] border-transparent border-t-gray-900/95"></div>
                                                     </div>
-                                                );
-                                            };
+                                                </div>
+                                            </div>
+                                        );
 
-                                            return (
-                                                <tr key={file.id} className="hover:bg-gray-50/50 transition-all group/row">
-                                                    <td className="px-8 py-5 text-sm font-bold text-gray-400">#{idx + 1}</td>
-                                                    <td className="px-8 py-5">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="size-8 rounded-lg bg-blue-50 flex items-center justify-center text-primary font-bold text-xs">
-                                                                {file.result?.candidateName?.charAt(0)?.toUpperCase() || '?'}
+                                        return (
+                                            <div key={file.id} className="group/card bg-white rounded-[3rem] p-5 border border-gray-100 shadow-sm hover:shadow-2xl hover:border-blue-200/50 transition-all duration-700 animate-in slide-in-from-bottom-8 fade-in duration-1000 relative">
+                                                <div className="flex flex-col lg:flex-row gap-8 items-stretch">
+
+                                                    {/* Left Section: Context */}
+                                                    <div className="flex items-center gap-6 pr-6 lg:border-r lg:border-gray-50/50">
+                                                        <div className="text-4xl font-black text-gray-300 group-hover/card:text-blue-200 transition-colors duration-700 leading-none select-none">#{idx + 1}</div>
+                                                        <div className="relative group/avatar shrink-0">
+                                                            <div className="size-24 rounded-[2.5rem] bg-gradient-to-br from-gray-50 via-blue-50/20 to-indigo-50/30 p-1 flex items-center justify-center overflow-hidden border border-blue-100/30 shadow-inner group-hover/avatar:rotate-2 transition-transform duration-700">
+                                                                <div className="size-full rounded-[2.2rem] bg-white flex items-center justify-center text-primary font-black text-4xl shadow-sm">
+                                                                    {file.result?.candidateName?.charAt(0)?.toUpperCase() || '?'}
+                                                                </div>
                                                             </div>
-                                                            <div className="min-w-0">
-                                                                <p className="text-sm font-bold text-text-main">{file.result?.candidateName || file.name}</p>
-                                                                {file.result?.currentRole && (
-                                                                    <p className="text-xs text-gray-400">{file.result.currentRole}</p>
-                                                                )}
+                                                            <div className={`absolute -bottom-1 -right-1 size-8 rounded-[1rem] ${scoreBg} border-4 border-white flex items-center justify-center shadow-lg transform group-hover/avatar:scale-110 transition-transform duration-500`}>
+                                                                <span className="material-symbols-outlined text-white text-[16px] filled">auto_awesome</span>
                                                             </div>
                                                         </div>
-                                                    </td>
-                                                    <td className="px-4 py-5">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden shrink-0">
-                                                                <div
-                                                                    className={`h-full transition-all duration-1000 ${file.status === 'COMPLETED' ? 'bg-primary' :
-                                                                        file.status === 'ERROR' ? 'bg-red-500' : 'bg-blue-200'
-                                                                        }`}
-                                                                    style={{ width: `${file.result?.matchScore || 0}%` }}
-                                                                ></div>
+                                                    </div>
+
+                                                    {/* Middle Section: Main Info */}
+                                                    <div className="flex-1 min-w-0 flex flex-col justify-center gap-4">
+                                                        <div>
+                                                            <h3 className="text-2xl font-black text-gray-800 tracking-tight group-hover/card:text-primary transition-colors duration-700 truncate mb-1">
+                                                                {file.result?.candidateName || file.name}
+                                                            </h3>
+                                                            <div className="flex items-center gap-3">
+                                                                <p className="text-xs font-bold text-gray-400 flex items-center gap-1.5 uppercase tracking-wider">
+                                                                    <span className="material-symbols-outlined text-sm">work</span>
+                                                                    {file.result?.currentRole || 'Talent Profile'}
+                                                                </p>
+                                                                <span className="size-1 bg-gray-200 rounded-full"></span>
+                                                                <p className="text-xs font-bold text-blue-500/70 flex items-center gap-1.5 uppercase tracking-wider">
+                                                                    <span className="material-symbols-outlined text-sm">location_on</span>
+                                                                    Remote
+                                                                </p>
                                                             </div>
-                                                            <span className={`text-sm font-bold ${file.status === 'ERROR' ? 'text-red-500' : 'text-primary'
-                                                                }`}>
-                                                                {file.result?.matchScore || 0}%
-                                                            </span>
                                                         </div>
-                                                    </td>
-                                                    <td className="px-4 py-5 text-center">
-                                                        <div className="flex justify-center">
-                                                            {renderScoreRing(file.result?.jdMatchScore || 0, file.result?.jdMatchReason)}
+
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            {file.result?.deepAnalysis?.skillsMatched?.slice(0, 5).map((skill: string, i: number) => (
+                                                                <span key={i} className="px-3.5 py-1.5 bg-gray-50/50 text-gray-500 text-[10px] font-black uppercase tracking-widest rounded-full border border-gray-100 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-100 transition-all duration-300">
+                                                                    {skill}
+                                                                </span>
+                                                            ))}
+                                                            {file.result?.deepAnalysis?.skillsMatched?.length > 5 && (
+                                                                <span className="text-[10px] text-gray-300 font-bold ml-1">+{file.result.deepAnalysis.skillsMatched.length - 5} MORE</span>
+                                                            )}
                                                         </div>
-                                                    </td>
-                                                    <td className="px-4 py-5 text-center">
-                                                        <div className="flex justify-center">
-                                                            {renderScoreRing(file.result?.qualificationMatchScore || 0, file.result?.qualificationMatchReason)}
+                                                    </div>
+
+                                                    {/* Right Section: Visual Insights */}
+                                                    <div className="flex flex-col sm:flex-row items-center gap-8 pl-8 pr-4 bg-gray-50/30 rounded-[2.5rem] border border-gray-100/30">
+                                                        {/* Secondary Rounds */}
+                                                        <div className="flex items-center gap-1">
+                                                            {renderMetric('JD Match', file.result?.jdMatchScore || 0, file.result?.jdMatchReason)}
+                                                            {renderMetric('Quals', file.result?.qualificationMatchScore || 0, file.result?.qualificationMatchReason)}
+                                                            {renderMetric('Quality', file.result?.resumeMatchScore || 0, file.result?.resumeMatchReason)}
                                                         </div>
-                                                    </td>
-                                                    <td className="px-4 py-5 text-center">
-                                                        <div className="flex justify-center">
-                                                            {renderScoreRing(file.result?.resumeMatchScore || 0, file.result?.resumeMatchReason)}
+
+                                                        {/* Master Circle & Button */}
+                                                        <div className="flex flex-col items-center gap-5 min-w-[160px]">
+                                                            <div className="group/main relative size-24 p-1.5 bg-white rounded-full shadow-[0_10px_30px_rgba(0,0,0,0.05)] border border-gray-50 group-hover/card:shadow-blue-500/10 transition-all duration-700">
+                                                                <div className="size-full rounded-full flex flex-col items-center justify-center relative">
+                                                                    <svg className="absolute inset-0 size-full rotate-[-90deg]" viewBox="0 0 80 80">
+                                                                        <circle cx="40" cy="40" r="34" fill="transparent" stroke="currentColor" strokeWidth="10" strokeDasharray={`${2 * Math.PI * 34}`} strokeDashoffset={`${2 * Math.PI * 34 * (1 - score / 100)}`} className={`${scoreColor} transition-all duration-1000 ease-out`} />
+                                                                        <circle cx="40" cy="40" r="34" fill="transparent" stroke="gray" strokeWidth="10" strokeOpacity="0.03" />
+                                                                    </svg>
+                                                                    <span className={`text-2xl font-black ${scoreColor} leading-none tracking-tighter`}>{score}%</span>
+                                                                    <span className="text-[9px] font-black text-gray-400 mt-1 tracking-widest uppercase">Matching</span>
+                                                                </div>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => setSelectedCandidate(file.result)}
+                                                                disabled={file.status !== 'COMPLETED' || !file.result?.deepAnalysis}
+                                                                className="w-full h-12 bg-gray-900 hover:bg-primary text-white text-[11px] font-black uppercase tracking-[0.15em] rounded-2xl shadow-xl shadow-gray-200 hover:shadow-blue-500/20 active:scale-95 transition-all duration-500 disabled:opacity-10 disabled:grayscale flex items-center justify-center gap-2 group-hover/card:bg-primary"
+                                                            >
+                                                                <span className="material-symbols-outlined text-[16px] filled">history_edu</span>
+                                                                AI Insights
+                                                            </button>
                                                         </div>
-                                                    </td>
-                                                    <td className="px-8 py-5">
-                                                        <p className="text-sm text-gray-500 font-medium truncate max-w-lg">
-                                                            {file.status === 'ERROR' ? 'Analysis failed' : file.result?.analysis || 'Processing...'}
-                                                        </p>
-                                                    </td>
-                                                    <td className="px-4 py-5 text-right">
-                                                        <button
-                                                            onClick={() => setSelectedCandidate(file.result)}
-                                                            disabled={file.status !== 'COMPLETED' || !file.result?.deepAnalysis}
-                                                            className="p-2 text-gray-400 hover:text-primary hover:bg-blue-50 rounded-lg transition-all disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-400"
-                                                            title="View Deep Analysis"
-                                                        >
-                                                            <span className="material-symbols-outlined">visibility</span>
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Integrated Summary Footer */}
+                                                <div className="mt-6 pt-5 border-t border-dashed border-gray-100/80">
+                                                    <div className="bg-gradient-to-r from-blue-50/40 via-transparent to-transparent p-4 rounded-3xl border border-blue-50/20 group-hover/card:border-blue-100/50 transition-all duration-700">
+                                                        <div className="flex items-start gap-3">
+                                                            <div className="size-8 rounded-xl bg-blue-100/50 flex items-center justify-center text-blue-500 shrink-0">
+                                                                <span className="material-symbols-outlined text-lg filled">auto_awesome</span>
+                                                            </div>
+                                                            <p className="text-sm text-gray-500 font-medium leading-relaxed italic pr-4">
+                                                                {file.status === 'ERROR' ? 'Analysis failed for this file.' : file.result?.analysis || 'Calculating candidate alignment tokens...'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
             {/* Deep Analysis Modal */}
