@@ -119,7 +119,7 @@ const CandidateDetail: React.FC = () => {
           <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-soft border border-blue-50 flex flex-col justify-between h-52 md:h-56 relative overflow-hidden">
             <div className="flex justify-between items-start z-10">
               <div className="flex flex-col">
-                <span className="text-text-tertiary text-[10px] md:text-xs font-bold uppercase tracking-widest mb-1">AI Match Score</span>
+                <span className="text-text-tertiary text-[10px] md:text-xs font-bold uppercase tracking-widest mb-1">Match Score</span>
                 <span className="text-4xl md:text-5xl font-extrabold text-text-main tracking-tighter">{candidate.matchScore}%</span>
               </div>
               <span className={`${candidate.matchScore > 80 ? 'bg-accent/10 text-accent' : 'bg-primary/10 text-primary'} px-2.5 py-1 rounded-lg text-[9px] md:text-[10px] font-bold flex items-center gap-1 uppercase tracking-widest`}>
@@ -151,20 +151,136 @@ const CandidateDetail: React.FC = () => {
         </div>
 
         <div className="bg-white rounded-[2.5rem] p-6 md:p-10 shadow-soft border border-blue-50">
-          <h3 className="text-xl md:text-2xl font-bold text-text-main tracking-tight mb-6 md:mb-8">Detailed Resume Insight</h3>
-          <div className="p-6 md:p-8 bg-background-main rounded-[1.5rem] md:rounded-[2rem] border border-blue-50">
-            <div className="flex items-center gap-4 md:gap-6 mb-6 md:mb-8">
-              <div className="size-14 md:size-16 rounded-2xl bg-white shadow-sm flex items-center justify-center text-primary shrink-0">
-                <span className="material-symbols-outlined text-2xl md:text-3xl">psychology</span>
+          <h3 className="text-xl md:text-2xl font-bold text-text-main tracking-tight mb-6 md:mb-8">Detailed Analysis</h3>
+
+          {/* Score Overview Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            {[
+              { label: 'JD Match', score: candidate.jdMatchScore || 0, reason: candidate.jdMatchReason },
+              { label: 'Qualification', score: candidate.qualificationMatchScore || 0, reason: candidate.qualificationMatchReason },
+              { label: 'Resume Quality', score: candidate.resumeMatchScore || 0, reason: candidate.resumeMatchReason },
+              { label: 'Candidate Record', score: candidate.candidateRecordScore || 0, reason: candidate.candidateRecordReason }
+            ].map((item, idx) => (
+              <div key={idx} className="flex flex-col items-center p-4 rounded-3xl bg-background-main border border-blue-50/50">
+                <div className="relative size-16 md:size-20 flex items-center justify-center mb-3">
+                  <svg height="80" width="80" className="rotate-[-90deg]">
+                    <circle
+                      stroke="currentColor"
+                      fill="transparent"
+                      strokeWidth="5"
+                      strokeDasharray={`${32 * 2 * Math.PI} ${32 * 2 * Math.PI}`}
+                      style={{ strokeDashoffset: 32 * 2 * Math.PI - (item.score / 100) * 32 * 2 * Math.PI }}
+                      r="32" cx="40" cy="40"
+                      className={`${item.score >= 80 ? 'text-green-500' : item.score >= 50 ? 'text-yellow-500' : 'text-primary'} transition-all`}
+                    />
+                    <circle stroke="#e5e7eb" fill="transparent" strokeWidth="5" r="32" cx="40" cy="40" className="opacity-20 absolute top-0 left-0" style={{ zIndex: -1 }} />
+                  </svg>
+                  <span className={`absolute text-sm md:text-base font-bold ${item.score >= 80 ? 'text-green-600' : item.score >= 50 ? 'text-yellow-600' : 'text-primary'}`}>{item.score}%</span>
+                </div>
+                <span className="text-[10px] md:text-xs font-bold text-text-tertiary uppercase tracking-widest mb-1.5">{item.label}</span>
+                <p className="text-[10px] text-center text-text-secondary leading-tight px-1 line-clamp-3">{item.reason}</p>
               </div>
-              <div>
-                <h4 className="font-bold text-base md:text-lg text-text-main">AI Summary</h4>
-                <p className="text-[11px] md:text-sm text-text-tertiary font-medium">Deep semantic analysis results</p>
+            ))}
+          </div>
+
+          {/* Deep Analysis Content */}
+          <div className="space-y-6 md:space-y-8">
+            {/* Executive Summary */}
+            <div className="p-6 md:p-8 bg-background-main rounded-[1.5rem] md:rounded-[2rem] border border-blue-50">
+              <div className="flex items-center gap-4 md:gap-6 mb-4">
+                <div className="size-12 md:size-14 rounded-2xl bg-white shadow-sm flex items-center justify-center text-primary shrink-0">
+                  <span className="material-symbols-outlined text-2xl">summarize</span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-base md:text-lg text-text-main">Executive Summary</h4>
+                  <p className="text-[10px] md:text-xs text-text-tertiary font-bold uppercase tracking-widest">High Level Overview</p>
+                </div>
+              </div>
+              <p className="text-xs md:text-sm text-text-secondary leading-relaxed font-medium">
+                {candidate.deepAnalysis?.executiveSummary || candidate.analysis || 'Analysis pending...'}
+              </p>
+            </div>
+
+            {/* SWOT Analysis */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+              {/* Strengths */}
+              <div className="p-5 md:p-6 bg-green-50/30 rounded-[1.5rem] border border-green-50">
+                <h4 className="text-xs font-bold text-green-700 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-sm">check_circle</span> Strengths
+                </h4>
+                <ul className="space-y-2.5">
+                  {candidate.deepAnalysis?.strengths?.map((item, i) => (
+                    <li key={i} className="text-xs md:text-sm text-text-main font-medium flex items-start gap-2">
+                      <span className="text-green-500 mt-0.5">●</span> {item}
+                    </li>
+                  )) || <li className="text-sm text-text-tertiary italic">No strengths listed.</li>}
+                </ul>
+              </div>
+
+              {/* Weaknesses */}
+              <div className="p-5 md:p-6 bg-red-50/30 rounded-[1.5rem] border border-red-50">
+                <h4 className="text-xs font-bold text-accent-red uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-sm">warning</span> Weaknesses
+                </h4>
+                <ul className="space-y-2.5">
+                  {candidate.deepAnalysis?.weaknesses?.map((item, i) => (
+                    <li key={i} className="text-xs md:text-sm text-text-main font-medium flex items-start gap-2">
+                      <span className="text-accent-red mt-0.5">●</span> {item}
+                    </li>
+                  )) || <li className="text-sm text-text-tertiary italic">No weaknesses listed.</li>}
+                </ul>
+              </div>
+
+              {/* Missing Skills */}
+              <div className="p-5 md:p-6 bg-orange-50/30 rounded-[1.5rem] border border-orange-50">
+                <h4 className="text-xs font-bold text-orange-700 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-sm">do_not_disturb_on</span> Missing Skills
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {candidate.deepAnalysis?.missingSkills?.map((item, i) => (
+                    <span key={i} className="px-3 py-1.5 bg-white border border-orange-100 text-orange-700 text-xs font-bold rounded-xl shadow-sm">
+                      {item}
+                    </span>
+                  )) || <span className="text-sm text-text-tertiary italic">No missing skills.</span>}
+                </div>
               </div>
             </div>
-            <p className="text-[13px] md:text-sm text-text-secondary leading-relaxed font-medium">
-              {candidate.analysis || 'The candidate demonstrates strong alignment with core requirements.'}
-            </p>
+
+            {/* Experience & Culture */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+              <div className="p-6 bg-background-main rounded-[1.5rem] border border-blue-50">
+                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-sm">history_edu</span> Experience Relevance
+                </h4>
+                <p className="text-xs md:text-sm text-text-main leading-relaxed">
+                  {candidate.deepAnalysis?.experienceRelevance || 'Not available.'}
+                </p>
+              </div>
+              <div className="p-6 bg-purple-50/30 rounded-[1.5rem] border border-purple-50">
+                <h4 className="text-xs font-bold text-purple-700 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-sm">diversity_3</span> Cultural Fit
+                </h4>
+                <p className="text-xs md:text-sm text-text-main leading-relaxed">
+                  {candidate.deepAnalysis?.culturalFit || 'Not available.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Interview Questions */}
+            <div className="p-6 md:p-8 bg-background-main rounded-[1.5rem] md:rounded-[2rem] border border-blue-50">
+              <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-widest mb-6 flex items-center gap-2">
+                <span className="material-symbols-outlined text-lg">quiz</span> Suggested Interview Questions
+              </h4>
+              <div className="space-y-3">
+                {candidate.deepAnalysis?.interviewQuestions?.map((q, i) => (
+                  <div key={i} className="flex gap-4 p-4 bg-white rounded-2xl shadow-sm border border-blue-50/50">
+                    <span className="size-6 bg-primary/10 text-primary rounded-lg flex items-center justify-center text-xs font-bold shrink-0">{i + 1}</span>
+                    <p className="text-xs md:text-sm text-text-main font-bold">{q}</p>
+                  </div>
+                )) || <p className="text-sm text-text-tertiary italic">No questions generated.</p>}
+              </div>
+            </div>
+
           </div>
         </div>
       </div>

@@ -56,6 +56,23 @@ export interface ExtractedResumeDetails {
     analysis: string;
     skillsFound: string[];
     experienceYears: number;
+    jdMatchScore: number;
+    qualificationMatchScore: number;
+    resumeMatchScore: number;
+    candidateRecordScore: number;
+    jdMatchReason: string;
+    qualificationMatchReason: string;
+    resumeMatchReason: string;
+    candidateRecordReason: string;
+    deepAnalysis: {
+        executiveSummary: string;
+        strengths: string[];
+        weaknesses: string[];
+        missingSkills: string[];
+        experienceRelevance: string;
+        interviewQuestions: string[];
+        culturalFit: string;
+    };
 }
 
 export const fileToBase64 = (file: File): Promise<string> => {
@@ -147,9 +164,58 @@ export const analyzeResume = async (
                         type: SchemaType.ARRAY,
                         items: { type: SchemaType.STRING }
                     },
-                    experienceYears: { type: SchemaType.NUMBER }
+                    experienceYears: { type: SchemaType.NUMBER },
+                    jdMatchScore: { type: SchemaType.NUMBER },
+                    qualificationMatchScore: { type: SchemaType.NUMBER },
+                    resumeMatchScore: { type: SchemaType.NUMBER },
+                    candidateRecordScore: { type: SchemaType.NUMBER },
+                    jdMatchReason: { type: SchemaType.STRING },
+                    qualificationMatchReason: { type: SchemaType.STRING },
+                    resumeMatchReason: { type: SchemaType.STRING },
+                    candidateRecordReason: { type: SchemaType.STRING },
+                    deepAnalysis: {
+                        type: SchemaType.OBJECT,
+                        properties: {
+                            executiveSummary: { type: SchemaType.STRING },
+                            strengths: {
+                                type: SchemaType.ARRAY,
+                                items: { type: SchemaType.STRING }
+                            },
+                            weaknesses: {
+                                type: SchemaType.ARRAY,
+                                items: { type: SchemaType.STRING }
+                            },
+                            missingSkills: {
+                                type: SchemaType.ARRAY,
+                                items: { type: SchemaType.STRING }
+                            },
+                            experienceRelevance: { type: SchemaType.STRING },
+                            interviewQuestions: {
+                                type: SchemaType.ARRAY,
+                                items: { type: SchemaType.STRING }
+                            },
+                            culturalFit: { type: SchemaType.STRING }
+                        },
+                        required: ["executiveSummary", "strengths", "weaknesses", "missingSkills", "experienceRelevance", "interviewQuestions", "culturalFit"]
+                    }
                 },
-                required: ["candidateName", "currentRole", "matchScore", "analysis", "skillsFound", "experienceYears"]
+                required: [
+                    "candidateName",
+                    "currentRole",
+                    "matchScore",
+                    "analysis",
+                    "skillsFound",
+                    "experienceYears",
+                    "jdMatchScore",
+                    "qualificationMatchScore",
+                    "resumeMatchScore",
+                    "candidateRecordScore",
+                    "jdMatchReason",
+                    "qualificationMatchReason",
+                    "resumeMatchReason",
+                    "candidateRecordReason",
+                    "deepAnalysis"
+                ]
             }
         }
     });
@@ -167,9 +233,25 @@ export const analyzeResume = async (
                 
                 You must extract the following strictly:
                 1. candidateName: Look for the most prominent name at the top. If not found, use a short, professional placeholder.
-                2. matchScore: A number from 0-100 indicating how well they fit the Key Skills and Title.
+                2. matchScore: A number from 0-100 indicating how well they fit the Key Skills and Title (Overall Score).
                 3. currentRole: Their latest job title.
                 4. experienceYears: Number of years of experience.
+                5. jdMatchScore: 0-100 score based purely on the text overlap and semantic match with the Job Description.
+                6. qualificationMatchScore: 0-100 score based on their education and certifications relevance.
+                7. resumeMatchScore: 0-100 score based on the quality, structure, and clarity of the resume content itself.
+                8. candidateRecordScore: 0-100 score based on the completeness and depth of the details provided in the resume.
+                9. jdMatchReason: A concise, one-sentence explanation of why the JD Match score was given (e.g. "Missing critical Python experience but has strong SQL").
+                10. qualificationMatchReason: A concise one-sentence reason for the qualification score (e.g. "Matches Master's requirement but unrelated field").
+                11. resumeMatchReason: A concise one-sentence reason for the resume quality score (e.g. "Clear formatting but lacks quantifiable metrics").
+                12. candidateRecordReason: A concise one-sentence reason for the record completeness (e.g. "Full contact info and links provided").
+                13. deepAnalysis: An object containing:
+                    - executiveSummary: A 2-3 sentence overview of the candidate's fit.
+                    - strengths: Array of 3 key strengths.
+                    - weaknesses: Array of 3 potential weaknesses.
+                    - missingSkills: Array of skills from the JD that are missing.
+                    - experienceRelevance: A paragraph analyzing how their past roles match the detailed job requirements.
+                    - interviewQuestions: Array of 5 technical and behavioral interview questions tailored to their gaps.
+                    - culturalFit: A brief assessment of likely cultural fit based on resume tone and activities.
                 
                 IMPORTANT: Return ONLY valid JSON. No markdown code blocks.`
             },

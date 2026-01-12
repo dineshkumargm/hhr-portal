@@ -156,7 +156,7 @@ const Chat: React.FC = () => {
     };
 
     const buildContextPrompt = async (): Promise<string> => {
-        let contextPrompt = "You are KAI Agent, an advanced AI recruitment assistant designed to be helpful, professional, and data-driven. Use markdown formatting (bolding, lists, tables) to make your responses easy to read. ";
+        let contextPrompt = "You are KAI Agent, an advanced AI recruitment assistant. IMPORTANT: You have access to specific data context (Job/Candidate/Resume) below. IF the user's question is relevant to this context, use it to provide a data-driven answer. IF the user asks a general question (e.g., 'What is React?', 'Who is Google?'), answer it generally based on your knowledge base, DO NOT force a connection to the context if none exists. Be helpful, professional, and concise. Use markdown.";
 
         if (context.type === 'job' && context.data) {
             const job = context.data as Job;
@@ -183,7 +183,7 @@ const Chat: React.FC = () => {
                 });
             }
 
-            contextPrompt += `\nThe user is asking about this job. Answer with structured insights.`;
+            contextPrompt += `\nThe user has this context active, but may ask general questions. Only use the context if it is relevant to the user's query. If the user asks a general question (e.g., "What is Google?"), answer it generally without forcing a connection to the context.`;
         } else if (context.type === 'candidate' && context.data) {
             const candidate = context.data as Candidate;
             contextPrompt += `\n\nCURRENT CONTEXT - CANDIDATE PROFILE:\n`;
@@ -199,7 +199,7 @@ const Chat: React.FC = () => {
                 contextPrompt += `\nAI Analysis:\n${candidate.analysis}\n`;
             }
 
-            contextPrompt += `\nThe user is asking about this candidate. Use the data above to provide detailed, reasoned answers.`;
+            contextPrompt += `\nThe user has this candidate context active. Use the data above if relevant, otherwise answer generally.`;
         } else if (context.type === 'resume' && context.data) {
             const candidate = context.data as Candidate;
             contextPrompt += `\n\nCURRENT CONTEXT - RESUME REVIEW:\n`;
